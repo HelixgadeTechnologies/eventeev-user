@@ -1,12 +1,32 @@
 {
   "Common": {
-    "welcome": "Welcome back",
-    "logout": "Logout"
+    "welcome": "Bienvenido de nuevo",
+    "logout": "Cerrar sesión",
+    "liveNow": "En Vivo"
   },
   "Dashboard": {
-    "schedule": "My Schedule",
-    "speakers": "Speakers",
+    "yourRank": "Tu Rango",
+    "pulseScore": "Puntaje Pulse",
+    "currentSchedule": "Horario Actual",
+    "fullAgenda": "Agenda Completa",
+    "happeningNow": "Sucediendo Ahora",
+    "gamesHub": "Juegos y Participación",
+    "dailyTrivia": "Trivia Diaria",
+    "winPoints": "Gana Puntos Pulse",
+    "leaderboard": "Tabla de Posiciones",
+    "viewRankings": "Ver Clasificaciones",
+    "eventResources": "Recursos del Evento",
+    "viewAll": "Ver Todo",
+    "startTrivia": "Iniciar Trivia",
+    "triviaCalloutTitle": "El Pulso Colectivo",
+    "triviaCalloutDescription": "¡Gana 50 puntos de bonificación respondiendo a la pregunta de trivia de hoy sobre el futuro de los eventos B2B!"
+  },
+  "Navigation": {
+    "dashboard": "Panel",
+    "speakers": "Oradores",
     "networking": "Networking",
-    "chat": "Chat"
+    "chat": "Chat",
+    "resources": "Recursos",
+    "games": "Juegos"
   }
 }

@@ -1,12 +1,32 @@
 {
   "Common": {
-    "welcome": "Welcome back",
-    "logout": "Logout"
+    "welcome": "Selamat datang kembali",
+    "logout": "Keluar",
+    "liveNow": "Langsung Sekarang"
   },
   "Dashboard": {
-    "schedule": "My Schedule",
-    "speakers": "Speakers",
-    "networking": "Networking",
-    "chat": "Chat"
+    "yourRank": "Peringkat Anda",
+    "pulseScore": "Skor Pulse",
+    "currentSchedule": "Jadwal Saat Ini",
+    "fullAgenda": "Agenda Lengkap",
+    "happeningNow": "Sedang Berlangsung",
+    "gamesHub": "Game & Keterlibatan",
+    "dailyTrivia": "Trivia Harian",
+    "winPoints": "Menangkan Poin Pulse",
+    "leaderboard": "Papan Peringkat",
+    "viewRankings": "Lihat Peringkat",
+    "eventResources": "Sumber Daya Acara",
+    "viewAll": "Lihat Semua",
+    "startTrivia": "Mulai Trivia",
+    "triviaCalloutTitle": "Nadi Kolektif",
+    "triviaCalloutDescription": "Dapatkan 50 poin bonus dengan menjawab pertanyaan trivia hari ini tentang masa depan acara B2B!"
+  },
+  "Navigation": {
+    "dashboard": "Dasbor",
+    "speakers": "Pembicara",
+    "networking": "Jejaring",
+    "chat": "Obrolan",
+    "resources": "Sumber Daya",
+    "games": "Permainan"
   }
 }

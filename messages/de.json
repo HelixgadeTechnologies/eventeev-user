@@ -1,13 +1,32 @@
 {
   "Common": {
     "welcome": "Willkommen zurück",
-    "logout": "Abmelden"
+    "logout": "Abmelden",
+    "liveNow": "Jetzt Live"
   },
   "Dashboard": {
-    "schedule": "Mein Zeitplan",
+    "yourRank": "Ihr Rang",
+    "pulseScore": "Pulse-Punktzahl",
+    "currentSchedule": "Aktueller Zeitplan",
+    "fullAgenda": "Vollständige Agenda",
+    "happeningNow": "Gerade stattfindend",
+    "gamesHub": "Spiele & Engagement",
+    "dailyTrivia": "Tägliches Quiz",
+    "winPoints": "Pulse-Punkte gewinnen",
+    "leaderboard": "Bestenliste",
+    "viewRankings": "Rangliste ansehen",
+    "eventResources": "Event-Ressourcen",
+    "viewAll": "Alle anzeigen",
+    "startTrivia": "Quiz starten",
+    "triviaCalloutTitle": "Der kollektive Puls",
+    "triviaCalloutDescription": "Verdienen Sie 50 Bonuspunkte, indem Sie die heutige Quizfrage zur Zukunft von B2B-Events beantworten!"
+  },
+  "Navigation": {
+    "dashboard": "Dashboard",
     "speakers": "Referenten",
-    "networking": "Netzwerken",
-    "chat": "Chat"
+    "networking": "Networking",
+    "chat": "Chat",
+    "resources": "Ressourcen",
+    "games": "Spiele"
   }
 }
-

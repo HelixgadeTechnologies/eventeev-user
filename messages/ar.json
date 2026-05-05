@@ -20,6 +20,13 @@
     "startTrivia": "ابدأ التحدي",
     "triviaCalloutTitle": "النبض الجماعي",
     "triviaCalloutDescription": "اربح 50 نقطة إضافية بالإجابة على سؤال اليوم حول مستقبل الفعاليات!"
+  },
+  "Navigation": {
+    "dashboard": "لوحة التحكم",
+    "speakers": "المتحدثون",
+    "networking": "التواصل",
+    "chat": "المحادثة",
+    "resources": "المصادر",
+    "games": "الألعاب"
   }
 }
-迫り

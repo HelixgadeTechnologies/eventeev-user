@@ -1,12 +1,32 @@
 {
   "Common": {
-    "welcome": "Welcome back",
-    "logout": "Logout"
+    "welcome": "Welkom terug",
+    "logout": "Teken uit",
+    "liveNow": "Nou Regstreeks"
   },
   "Dashboard": {
-    "schedule": "My Schedule",
-    "speakers": "Speakers",
-    "networking": "Networking",
-    "chat": "Chat"
+    "yourRank": "Jou Rang",
+    "pulseScore": "Pulse-telling",
+    "currentSchedule": "Huidige Skedule",
+    "fullAgenda": "Volledige Agenda",
+    "happeningNow": "Gebeur Nou",
+    "gamesHub": "Speletjies & Betrokkenheid",
+    "dailyTrivia": "Daaglikse Vasvra",
+    "winPoints": "Wen Pulse-punte",
+    "leaderboard": "Ranglys",
+    "viewRankings": "Sien Ranglys",
+    "eventResources": "Geleentheid-hulpbronne",
+    "viewAll": "Sien Alles",
+    "startTrivia": "Begin Vasvra",
+    "triviaCalloutTitle": "Die Kollektiewe Pols",
+    "triviaCalloutDescription": "Verdien 50 bonuspunte deur vandag se vasvra-vraag oor die toekoms van B2B-geleenthede te beantwoord!"
+  },
+  "Navigation": {
+    "dashboard": "Dashboard",
+    "speakers": "Sprekers",
+    "networking": "Netwerk",
+    "chat": "Klets",
+    "resources": "Hulpbronne",
+    "games": "Speletjies"
   }
 }

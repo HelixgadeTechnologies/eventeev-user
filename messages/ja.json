@@ -1,12 +1,32 @@
 {
   "Common": {
-    "welcome": "Welcome back",
-    "logout": "Logout"
+    "welcome": "おかえりなさい",
+    "logout": "ログアウト",
+    "liveNow": "ライブ中"
   },
   "Dashboard": {
-    "schedule": "My Schedule",
-    "speakers": "Speakers",
-    "networking": "Networking",
-    "chat": "Chat"
+    "yourRank": "現在のランク",
+    "pulseScore": "パルススコア",
+    "currentSchedule": "現在のスケジュール",
+    "fullAgenda": "全アジェンダ",
+    "happeningNow": "開催中",
+    "gamesHub": "ゲーム＆エンゲージメント",
+    "dailyTrivia": "デイリートビア",
+    "winPoints": "パルスポイントを獲得",
+    "leaderboard": "リーダーボード",
+    "viewRankings": "ランキングを表示",
+    "eventResources": "イベント資料",
+    "viewAll": "すべて表示",
+    "startTrivia": "クイズを開始",
+    "triviaCalloutTitle": "コレクティブ・パルス",
+    "triviaCalloutDescription": "今日のB2Bイベントの未来に関するクイズに答えて、50ボーナスポイントを獲得しましょう！"
+  },
+  "Navigation": {
+    "dashboard": "ダッシュボード",
+    "speakers": "スピーカー",
+    "networking": "ネットワーキング",
+    "chat": "チャット",
+    "resources": "リソース",
+    "games": "ゲーム"
   }
 }

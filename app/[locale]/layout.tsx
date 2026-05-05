@@ -51,9 +51,7 @@ export default async function RootLayout({
     <html lang={locale} dir={dir} suppressHydrationWarning>
       <body className={`${plusJakartaSans.variable} font-sans`}>
         <NextIntlClientProvider messages={messages}>
-          <div className="min-h-screen flex flex-col max-w-md mx-auto bg-white shadow-2xl relative overflow-hidden">
-            <AppLayout>{children}</AppLayout>
-          </div>
+          <AppLayout>{children}</AppLayout>
         </NextIntlClientProvider>
       </body>
     </html>

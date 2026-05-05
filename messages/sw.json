@@ -1,12 +1,32 @@
 {
   "Common": {
-    "welcome": "Welcome back",
-    "logout": "Logout"
+    "welcome": "Karibu tena",
+    "logout": "Ondoka",
+    "liveNow": "Mubashara Sasa"
   },
   "Dashboard": {
-    "schedule": "My Schedule",
-    "speakers": "Speakers",
-    "networking": "Networking",
-    "chat": "Chat"
+    "yourRank": "Cheo Chako",
+    "pulseScore": "Alama ya Pulse",
+    "currentSchedule": "Ratiba ya Sasa",
+    "fullAgenda": "Agenda Kamili",
+    "happeningNow": "Inayotokea Sasa",
+    "gamesHub": "Michezo & Ushirikiano",
+    "dailyTrivia": "Trivia ya Kila Siku",
+    "winPoints": "Shinda Alama za Pulse",
+    "leaderboard": "Bao la Wanaoongoza",
+    "viewRankings": "Angalia Viwango",
+    "eventResources": "Rasilimali za Tukio",
+    "viewAll": "Angalia Zote",
+    "startTrivia": "Anza Trivia",
+    "triviaCalloutTitle": "Mapigo ya Pamoja",
+    "triviaCalloutDescription": "Jipatie alama 50 za ziada kwa kujibu swali la trivia la leo kuhusu baadaye ya matukio ya B2B!"
+  },
+  "Navigation": {
+    "dashboard": "Dashibodi",
+    "speakers": "Wazungumzaji",
+    "networking": "Ushirikiano",
+    "chat": "Mazungumzo",
+    "resources": "Rasilimali",
+    "games": "Michezo"
   }
 }

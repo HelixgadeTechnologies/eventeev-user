@@ -1,12 +1,32 @@
 {
   "Common": {
-    "welcome": "Welcome back",
-    "logout": "Logout"
+    "welcome": "Bon retour",
+    "logout": "Déconnexion",
+    "liveNow": "En Direct"
   },
   "Dashboard": {
-    "schedule": "My Schedule",
-    "speakers": "Speakers",
-    "networking": "Networking",
-    "chat": "Chat"
+    "yourRank": "Votre Rang",
+    "pulseScore": "Score Pulse",
+    "currentSchedule": "Programme Actuel",
+    "fullAgenda": "Agenda Complet",
+    "happeningNow": "En ce moment",
+    "gamesHub": "Jeux & Engagement",
+    "dailyTrivia": "Quiz Quotidien",
+    "winPoints": "Gagnez des Points Pulse",
+    "leaderboard": "Classement",
+    "viewRankings": "Voir les Classements",
+    "eventResources": "Ressources de l'Événement",
+    "viewAll": "Voir Tout",
+    "startTrivia": "Commencer le Quiz",
+    "triviaCalloutTitle": "Le Pouls Collectif",
+    "triviaCalloutDescription": "Gagnez 50 points bonus en répondant à la question du jour sur l'avenir des événements B2B !"
+  },
+  "Navigation": {
+    "dashboard": "Tableau de bord",
+    "speakers": "Conférenciers",
+    "networking": "Réseautage",
+    "chat": "Chat",
+    "resources": "Ressources",
+    "games": "Jeux"
   }
 }

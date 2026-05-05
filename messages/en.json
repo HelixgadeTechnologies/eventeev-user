@@ -20,6 +20,13 @@
     "startTrivia": "Start Trivia",
     "triviaCalloutTitle": "The Collective Pulse",
     "triviaCalloutDescription": "Earn 50 bonus points by answering today's trivia question about the future of B2B events!"
+  },
+  "Navigation": {
+    "dashboard": "Dashboard",
+    "speakers": "Speakers",
+    "networking": "Networking",
+    "chat": "Chat",
+    "resources": "Resources",
+    "games": "Games"
   }
 }
-迫り
