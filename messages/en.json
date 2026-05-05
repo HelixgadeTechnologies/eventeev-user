@@ -1,0 +1,25 @@
+{
+  "Common": {
+    "welcome": "Welcome back",
+    "logout": "Logout",
+    "liveNow": "Live Now"
+  },
+  "Dashboard": {
+    "yourRank": "Your Rank",
+    "pulseScore": "Pulse Score",
+    "currentSchedule": "Current Schedule",
+    "fullAgenda": "Full Agenda",
+    "happeningNow": "Happening Now",
+    "gamesHub": "Games & Engagement",
+    "dailyTrivia": "Daily Trivia",
+    "winPoints": "Win Pulse Points",
+    "leaderboard": "Leaderboard",
+    "viewRankings": "View Rankings",
+    "eventResources": "Event Resources",
+    "viewAll": "View All",
+    "startTrivia": "Start Trivia",
+    "triviaCalloutTitle": "The Collective Pulse",
+    "triviaCalloutDescription": "Earn 50 bonus points by answering today's trivia question about the future of B2B events!"
+  }
+}
+迫り

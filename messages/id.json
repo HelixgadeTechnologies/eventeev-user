@@ -1,0 +1,12 @@
+{
+  "Common": {
+    "welcome": "Welcome back",
+    "logout": "Logout"
+  },
+  "Dashboard": {
+    "schedule": "My Schedule",
+    "speakers": "Speakers",
+    "networking": "Networking",
+    "chat": "Chat"
+  }
+}

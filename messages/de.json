@@ -1,0 +1,13 @@
+{
+  "Common": {
+    "welcome": "Willkommen zurück",
+    "logout": "Abmelden"
+  },
+  "Dashboard": {
+    "schedule": "Mein Zeitplan",
+    "speakers": "Referenten",
+    "networking": "Netzwerken",
+    "chat": "Chat"
+  }
+}
+

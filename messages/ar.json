@@ -1,0 +1,25 @@
+{
+  "Common": {
+    "welcome": "مرحباً بك مجدداً",
+    "logout": "تسجيل الخروج",
+    "liveNow": "مباشر الآن"
+  },
+  "Dashboard": {
+    "yourRank": "رتبتك",
+    "pulseScore": "درجة النبض",
+    "currentSchedule": "الجدول الحالي",
+    "fullAgenda": "الأجندة الكاملة",
+    "happeningNow": "يحدث الآن",
+    "gamesHub": "الألعاب والمشاركة",
+    "dailyTrivia": "تحدي اليوم",
+    "winPoints": "اربح نقاط النبض",
+    "leaderboard": "لوحة المتصدرين",
+    "viewRankings": "عرض التصنيفات",
+    "eventResources": "مصادر الفعالية",
+    "viewAll": "عرض الكل",
+    "startTrivia": "ابدأ التحدي",
+    "triviaCalloutTitle": "النبض الجماعي",
+    "triviaCalloutDescription": "اربح 50 نقطة إضافية بالإجابة على سؤال اليوم حول مستقبل الفعاليات!"
+  }
+}
+迫り
