@@ -49,7 +49,7 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} dir={dir} suppressHydrationWarning>
-      <body className={`${plusJakartaSans.variable} font-sans`}>
+      <body className={`${plusJakartaSans.variable} font-sans`} suppressHydrationWarning>
         <NextIntlClientProvider messages={messages} locale={locale}>
           <AppLayout>{children}</AppLayout>
         </NextIntlClientProvider>
