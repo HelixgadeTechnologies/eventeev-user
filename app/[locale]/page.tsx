@@ -2,23 +2,40 @@
 
 import { useState } from "react";
 import { useRouter } from "@/i18n/routing";
-import { motion } from "framer-motion";
-import { QrCode, ArrowRight, ShieldCheck } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { QrCode, ArrowRight, ShieldCheck, Mail, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function JoinPage() {
+  const [step, setStep] = useState<1 | 2>(1);
   const [code, setCode] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleJoin = (e: React.FormEvent) => {
+  const handleNextStep = (e: React.FormEvent) => {
     e.preventDefault();
     if (code.length < 4) return;
+    setStep(2);
+  };
+
+  const handleJoin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fullName || !email) return;
     
     setLoading(true);
-    // Simulate API call
+    // Simulate API call to check registration
     setTimeout(() => {
-      router.push("/dashboard");
+      // Mock logic: If email contains 'test', assume registered. Otherwise, unregistered.
+      const isRegistered = email.toLowerCase().includes("test");
+      
+      if (isRegistered) {
+        router.push("/dashboard");
+      } else {
+        // Redirect to Paystack mock link for unregistered users
+        window.location.href = "https://paystack.com/pay/mock-event-link";
+      }
     }, 1500);
   };
 
@@ -38,56 +55,132 @@ export default function JoinPage() {
             Eventeev <span className="text-eventeev-orange">Attendee</span>
           </h1>
           <p className="text-eventeev-slate text-lg font-medium">
-            Enter your event code to join the ecosystem.
+            {step === 1 ? "Enter your event code to join the ecosystem." : "Provide your details to continue."}
           </p>
         </div>
 
-        <form onSubmit={handleJoin} className="space-y-6">
-          <div className="relative group">
-            <input
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="EVENT CODE (e.g. EVT2026)"
-              className="w-full h-16 px-6 bg-slate-50 border-2 border-slate-100 rounded-2xl text-xl font-bold tracking-widest text-eventeev-navy focus:border-eventeev-orange focus:bg-white focus:outline-none transition-all duration-300 placeholder:text-slate-300 placeholder:tracking-normal placeholder:font-medium"
-            />
-          </div>
+        <div className="relative min-h-[200px]">
+          <AnimatePresence mode="wait">
+            {step === 1 && (
+              <motion.form
+                key="step1"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.3 }}
+                onSubmit={handleNextStep}
+                className="space-y-6 absolute w-full"
+              >
+                <div className="relative group">
+                  <input
+                    type="text"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                    placeholder="EVENT CODE (e.g. EVT2026)"
+                    className="w-full h-16 px-6 bg-slate-50 border-2 border-slate-100 rounded-2xl text-xl font-bold tracking-widest text-eventeev-navy focus:border-eventeev-orange focus:bg-white focus:outline-none transition-all duration-300 placeholder:text-slate-300 placeholder:tracking-normal placeholder:font-medium"
+                  />
+                </div>
 
-          <button
-            type="submit"
-            disabled={code.length < 4 || loading}
-            className={cn(
-              "w-full h-16 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all duration-300 shadow-xl",
-              code.length >= 4 && !loading
-                ? "bg-eventeev-orange text-white hover:scale-[1.02] active:scale-[0.98]"
-                : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                <button
+                  type="submit"
+                  disabled={code.length < 4}
+                  className={cn(
+                    "w-full h-16 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all duration-300 shadow-xl",
+                    code.length >= 4
+                      ? "bg-eventeev-orange text-white hover:scale-[1.02] active:scale-[0.98]"
+                      : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  )}
+                >
+                  Continue
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+              </motion.form>
             )}
-          >
-            {loading ? (
-              <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <>
-                Join Event
-                <ArrowRight className="w-5 h-5" />
-              </>
-            )}
-          </button>
-        </form>
 
-        <div className="mt-8 flex items-center gap-4">
-          <div className="h-[1px] flex-1 bg-slate-100" />
-          <span className="text-slate-400 font-bold text-xs uppercase tracking-widest">or scan</span>
-          <div className="h-[1px] flex-1 bg-slate-100" />
+            {step === 2 && (
+              <motion.form
+                key="step2"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.3 }}
+                onSubmit={handleJoin}
+                className="space-y-4 absolute w-full"
+              >
+                <div className="relative">
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Full Name"
+                    className="w-full h-14 pl-12 pr-6 bg-slate-50 border-2 border-slate-100 rounded-xl text-lg font-medium text-eventeev-navy focus:border-eventeev-orange focus:bg-white focus:outline-none transition-all duration-300 placeholder:text-slate-300"
+                    required
+                  />
+                </div>
+                
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Email Address"
+                    className="w-full h-14 pl-12 pr-6 bg-slate-50 border-2 border-slate-100 rounded-xl text-lg font-medium text-eventeev-navy focus:border-eventeev-orange focus:bg-white focus:outline-none transition-all duration-300 placeholder:text-slate-300"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!fullName || !email || loading}
+                  className={cn(
+                    "w-full h-16 mt-2 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all duration-300 shadow-xl",
+                    fullName && email && !loading
+                      ? "bg-eventeev-orange text-white hover:scale-[1.02] active:scale-[0.98]"
+                      : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  )}
+                >
+                  {loading ? (
+                    <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      Join Event
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  disabled={loading}
+                  className="text-slate-400 font-medium text-sm hover:text-slate-600 transition-colors"
+                >
+                  Back to Event Code
+                </button>
+              </motion.form>
+            )}
+          </AnimatePresence>
         </div>
 
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="mt-8 flex items-center gap-3 mx-auto px-6 py-3 bg-white border border-slate-200 rounded-full shadow-sm hover:shadow-md transition-all text-slate-600 font-bold"
-        >
-          <QrCode className="w-5 h-5 text-eventeev-orange" />
-          Scan QR Code
-        </motion.button>
+        {step === 1 && (
+          <>
+            <div className="mt-8 flex items-center gap-4">
+              <div className="h-[1px] flex-1 bg-slate-100" />
+              <span className="text-slate-400 font-bold text-xs uppercase tracking-widest">or scan</span>
+              <div className="h-[1px] flex-1 bg-slate-100" />
+            </div>
+
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="mt-8 flex items-center gap-3 mx-auto px-6 py-3 bg-white border border-slate-200 rounded-full shadow-sm hover:shadow-md transition-all text-slate-600 font-bold"
+            >
+              <QrCode className="w-5 h-5 text-eventeev-orange" />
+              Scan QR Code
+            </motion.button>
+          </>
+        )}
       </motion.div>
 
       <div className="absolute bottom-12 left-0 right-0 px-8">
