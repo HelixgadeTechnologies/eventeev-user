@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from '@/i18n/routing';
 import { Home, Users, MessageSquare, Mic2, FileText, Bell } from 'lucide-react';
@@ -21,10 +22,7 @@ export function Sidebar() {
   return (
     <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-100 h-screen sticky top-0 left-0 p-6">
       <div className="flex items-center gap-3 mb-10 px-2">
-        <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-100">
-          <span className="text-white font-black text-2xl">E</span>
-        </div>
-        <span className="font-black text-2xl text-slate-900 tracking-tighter uppercase">Eventeev</span>
+        <Image src="/icons/eventeev-logo.png" alt="Eventeev Logo" width={140} height={40} className="object-contain" />
       </div>
 
       <nav className="flex-1 space-y-2">

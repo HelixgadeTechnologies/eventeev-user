@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "@/i18n/routing";
 import { motion, AnimatePresence } from "framer-motion";
 import { QrCode, ArrowRight, ShieldCheck, Mail, User } from "lucide-react";
@@ -20,23 +21,40 @@ export default function JoinPage() {
     setStep(2);
   };
 
-  const handleJoin = (e: React.FormEvent) => {
+  const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName || !email) return;
     
     setLoading(true);
-    // Simulate API call to check registration
-    setTimeout(() => {
+    try {
       // Mock logic: If email contains 'test', assume registered. Otherwise, unregistered.
       const isRegistered = email.toLowerCase().includes("test");
       
       if (isRegistered) {
         router.push("/dashboard");
       } else {
-        // Redirect to Paystack mock link for unregistered users
-        window.location.href = "https://paystack.com/pay/mock-event-link";
+        // Initialize Paystack transaction
+        const response = await fetch("/api/paystack/initialize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+        
+        const data = await response.json();
+        
+        if (data.status && data.data?.authorization_url) {
+          window.location.href = data.data.authorization_url;
+        } else {
+          console.error("Payment initialization failed:", data);
+          setLoading(false);
+          alert("Failed to initialize payment. Please try again.");
+        }
       }
-    }, 1500);
+    } catch (error) {
+      console.error("Error joining event:", error);
+      setLoading(false);
+      alert("An error occurred. Please try again.");
+    }
   };
 
   return (
@@ -48,12 +66,9 @@ export default function JoinPage() {
         className="w-full max-w-sm"
       >
         <div className="mb-12">
-          <div className="w-20 h-20 bg-eventeev-orange/10 rounded-3xl flex items-center justify-center mx-auto mb-6 premium-shadow">
-            <ShieldCheck className="w-10 h-10 text-eventeev-orange" />
+          <div className="flex items-center justify-center mx-auto mb-6">
+            <Image src="/icons/eventeev-logo.png" alt="Eventeev Logo" width={200} height={60} className="object-contain" />
           </div>
-          <h1 className="text-4xl font-extrabold text-eventeev-navy mb-3 tracking-tight">
-            Eventeev <span className="text-eventeev-orange">Attendee</span>
-          </h1>
           <p className="text-eventeev-slate text-lg font-medium">
             {step === 1 ? "Enter your event code to join the ecosystem." : "Provide your details to continue."}
           </p>
