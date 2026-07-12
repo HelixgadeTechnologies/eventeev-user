@@ -4,7 +4,7 @@ import { BottomNav } from "./BottomNav";
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
 import { InstallBanner } from "../pwa/InstallBanner";
-import { usePathname } from "next/navigation";
+import { usePathname } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {

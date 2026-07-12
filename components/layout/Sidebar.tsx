@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname } from '@/i18n/routing';
 import { Home, Users, MessageSquare, Mic2, FileText, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import LanguageSwitcher from '../LanguageSwitcher';
