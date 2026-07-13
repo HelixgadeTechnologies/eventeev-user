@@ -33,12 +33,18 @@ export async function POST(req: NextRequest) {
       }),
     });
 
-    const data = await response.json();
+    const text = await response.text();
+    let data: any = {};
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error("Failed to parse Paystack JSON:", text);
+    }
 
     if (!response.ok) {
-      console.error("Paystack API Error:", data);
+      console.error("Paystack API Error:", response.status, text);
       return NextResponse.json(
-        { error: "Payment initialization failed", details: data },
+        { error: "Payment initialization failed", details: data, status: response.status },
         { status: response.status }
       );
     }

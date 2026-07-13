@@ -40,12 +40,18 @@ export default function JoinPage() {
           body: JSON.stringify({ email }),
         });
         
-        const data = await response.json();
+        const text = await response.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          console.error("Failed to parse JSON:", text);
+        }
         
-        if (data.status && data.data?.authorization_url) {
+        if (response.ok && data.status && data.data?.authorization_url) {
           window.location.href = data.data.authorization_url;
         } else {
-          console.error("Payment initialization failed:", data);
+          console.error("Payment initialization failed:", response.status, text, data);
           setLoading(false);
           alert("Failed to initialize payment. Please try again.");
         }
