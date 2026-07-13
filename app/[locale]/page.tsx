@@ -27,34 +27,22 @@ export default function JoinPage() {
     
     setLoading(true);
     try {
-      // Mock logic: If email contains 'test', assume registered. Otherwise, unregistered.
-      const isRegistered = email.toLowerCase().includes("test");
+      const response = await fetch("/api/attendee/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, name: fullName }),
+      });
       
-      if (isRegistered) {
+      const data = await response.json();
+      
+      if (response.ok && data.token) {
+        // Here we could store the token in localStorage or cookie
+        localStorage.setItem("token", data.token);
         router.push("/dashboard");
       } else {
-        // Initialize Paystack transaction
-        const response = await fetch("/api/paystack/initialize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
-        });
-        
-        const text = await response.text();
-        let data: any = {};
-        try {
-          data = JSON.parse(text);
-        } catch (e) {
-          console.error("Failed to parse JSON:", text);
-        }
-        
-        if (response.ok && data.status && data.data?.authorization_url) {
-          window.location.href = data.data.authorization_url;
-        } else {
-          console.error("Payment initialization failed:", response.status, text, data);
-          setLoading(false);
-          alert("Failed to initialize payment. Please try again.");
-        }
+        console.error("Failed to register:", data);
+        setLoading(false);
+        alert(data.error || "Failed to register. Please try again.");
       }
     } catch (error) {
       console.error("Error joining event:", error);
