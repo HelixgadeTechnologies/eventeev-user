@@ -6,7 +6,7 @@ import Attendee from "@/lib/models/Attendee";
 import { verifyToken } from "@/lib/jwt";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const authHeader = req.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -20,8 +20,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
 
     await dbConnect();
-    const ticketId = params.id;
+    const { id: ticketId } = await params;
     const ticket: any = await Ticket.findOne({ _id: ticketId, attendeeId: decoded.id })
+
       .populate('eventId')
       .populate('attendeeId');
 

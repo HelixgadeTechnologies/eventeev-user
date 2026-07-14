@@ -4,10 +4,11 @@ import ChatMessage from "@/lib/models/ChatMessage";
 import Attendee from "@/lib/models/Attendee";
 import { verifyToken } from "@/lib/jwt";
 
-export async function GET(req: NextRequest, { params }: { params: { roomId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
   try {
     await dbConnect();
-    const messages = await ChatMessage.find({ roomId: params.roomId })
+    const { roomId } = await params;
+    const messages = await ChatMessage.find({ roomId })
       .sort({ createdAt: 1 })
       .populate({ path: 'senderId', model: Attendee, select: 'name avatarUrl' });
 
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest, { params }: { params: { roomId: stri
   }
 }
 
-export async function POST(req: NextRequest, { params }: { params: { roomId: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
   try {
     const authHeader = req.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -32,8 +33,9 @@ export async function POST(req: NextRequest, { params }: { params: { roomId: str
 
     if (!content) return NextResponse.json({ error: "Message content required" }, { status: 400 });
 
+    const { roomId } = await params;
     const message = await ChatMessage.create({
-      roomId: params.roomId,
+      roomId,
       senderId: decoded.id,
       content
     });

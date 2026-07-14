@@ -3,7 +3,7 @@ import dbConnect from "@/lib/db";
 
 // NOTE: Since there was no explicitly requested 'Schedule' model, we are mocking this 
 // response or it could be added to the Event model.
-export async function GET(req: NextRequest, { params }: { params: { eventId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ eventId: string }> }) {
   try {
     await dbConnect();
     // Assuming schedule is an array we fetch. Here we just mock it for the structure.

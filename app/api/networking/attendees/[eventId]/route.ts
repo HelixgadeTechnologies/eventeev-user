@@ -4,7 +4,7 @@ import Ticket from "@/lib/models/Ticket";
 import Attendee from "@/lib/models/Attendee";
 import { verifyToken } from "@/lib/jwt";
 
-export async function GET(req: NextRequest, { params }: { params: { eventId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ eventId: string }> }) {
   try {
     const authHeader = req.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -16,9 +16,10 @@ export async function GET(req: NextRequest, { params }: { params: { eventId: str
     if (!decoded) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     await dbConnect();
+    const { eventId } = await params;
     
     // Find all valid tickets for this event
-    const tickets = await Ticket.find({ eventId: params.eventId, status: 'valid' })
+    const tickets = await Ticket.find({ eventId, status: 'valid' })
       .populate({ path: 'attendeeId', model: Attendee, select: 'name email avatarUrl' });
 
     // Filter out the current user

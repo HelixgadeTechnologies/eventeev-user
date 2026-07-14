@@ -3,7 +3,7 @@ import dbConnect from "@/lib/db";
 import Connection from "@/lib/models/Connection";
 import { verifyToken } from "@/lib/jwt";
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const authHeader = req.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -19,7 +19,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
 
-    const connection = await Connection.findOne({ _id: params.id, recipientId: decoded.id });
+    const { id } = await params;
+    const connection = await Connection.findOne({ _id: id, recipientId: decoded.id });
 
     if (!connection) {
       return NextResponse.json({ error: "Connection request not found" }, { status: 404 });

@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Event from "@/lib/models/Event";
 
-export async function GET(req: NextRequest, { params }: { params: { slug: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
     await dbConnect();
-    const event = await Event.findOne({ slug: params.slug, published: true });
+    const { slug } = await params;
+    const event = await Event.findOne({ slug, published: true });
     
     if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
