@@ -5,6 +5,7 @@ import Event from "@/lib/models/Event";
 import Ticket from "@/lib/models/Ticket";
 import { signToken } from "@/lib/jwt";
 import crypto from "crypto";
+import mongoose from "mongoose";
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,9 +16,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Name, email, and eventId are required" }, { status: 400 });
     }
 
-    // Check if the event is present in the DB
-    // Since eventId might be a short code (slug) or an ObjectId, we search by slug (case-insensitive)
-    const event = await Event.findOne({ slug: new RegExp(`^${eventId}$`, 'i') });
+    const isValidId = mongoose.isValidObjectId(eventId);
+    
+    // Since eventId might be a short code (slug) or an ObjectId, we search by slug (case-insensitive) or _id
+    const event = await Event.findOne({
+      $or: [
+        { slug: new RegExp(`^${eventId}$`, 'i') },
+        ...(isValidId ? [{ _id: eventId }] : [])
+      ]
+    });
     if (!event) {
       return NextResponse.json({ error: "Event not found. Please check your code." }, { status: 404 });
     }

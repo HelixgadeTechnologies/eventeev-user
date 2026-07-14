@@ -47,8 +47,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     page.drawText(`Order ID: ${ticket.orderId}`, { x: 50, y: 130, size: 14, font: boldFont });
 
     const pdfBytes = await pdfDoc.save();
+    const pdfBuffer = Buffer.from(pdfBytes);
 
-    return new NextResponse(pdfBytes, {
+    return new NextResponse(pdfBuffer, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
