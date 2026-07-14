@@ -17,12 +17,13 @@ export async function POST(req: NextRequest) {
     }
 
     const isValidId = mongoose.isValidObjectId(eventId);
+    const objectId = isValidId ? new mongoose.Types.ObjectId(eventId) : null;
     
     // Since eventId might be a short code (slug) or an ObjectId, we search by slug (case-insensitive) or _id
     const event = await Event.findOne({
       $or: [
         { slug: new RegExp(`^${eventId}$`, 'i') },
-        ...(isValidId ? [{ _id: eventId }] : [])
+        ...(objectId ? [{ _id: objectId }] : [])
       ]
     });
     if (!event) {
