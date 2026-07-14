@@ -30,7 +30,7 @@ export default function JoinPage() {
       const response = await fetch("/api/attendee/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name: fullName }),
+        body: JSON.stringify({ email, name: fullName, eventId: code }),
       });
       
       const data = await response.json();

@@ -1,15 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Attendee from "@/lib/models/Attendee";
+import Event from "@/lib/models/Event";
+import Ticket from "@/lib/models/Ticket";
 import { signToken } from "@/lib/jwt";
+import crypto from "crypto";
 
 export async function POST(req: NextRequest) {
   try {
     await dbConnect();
-    const { name, email } = await req.json();
+    const { name, email, eventId } = await req.json();
 
-    if (!name || !email) {
-      return NextResponse.json({ error: "Name and email are required" }, { status: 400 });
+    if (!name || !email || !eventId) {
+      return NextResponse.json({ error: "Name, email, and eventId are required" }, { status: 400 });
+    }
+
+    // Check if the event is present in the DB
+    // Since eventId might be a short code (slug) or an ObjectId, we search by slug (case-insensitive)
+    const event = await Event.findOne({ slug: new RegExp(`^${eventId}$`, 'i') });
+    if (!event) {
+      return NextResponse.json({ error: "Event not found. Please check your code." }, { status: 404 });
     }
 
     let attendee = await Attendee.findOne({ email });
@@ -18,9 +28,24 @@ export async function POST(req: NextRequest) {
       attendee = await Attendee.create({ name, email });
     }
 
+    // Connect the user to the event by creating a Ticket
+    // Generate a random orderId for free events or initial registration
+    const orderId = `ORD-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+    
+    // Check if user is already registered for this event
+    const existingTicket = await Ticket.findOne({ attendeeId: attendee._id, eventId: event._id });
+    if (!existingTicket) {
+      await Ticket.create({
+        attendeeId: attendee._id,
+        eventId: event._id,
+        orderId,
+        tier: "General Admission", // Default or you can pass it in req.json()
+      });
+    }
+
     const token = signToken({ id: attendee._id, email: attendee.email });
 
-    return NextResponse.json({ message: "Registered successfully", attendee, token });
+    return NextResponse.json({ message: "Registered successfully", attendee, token, event });
   } catch (error) {
     console.error("Register Error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
