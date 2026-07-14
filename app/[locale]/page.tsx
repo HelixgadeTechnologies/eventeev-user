@@ -13,12 +13,31 @@ export default function JoinPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingEvent, setLoadingEvent] = useState(false);
+  const [eventDetails, setEventDetails] = useState<any>(null);
   const router = useRouter();
 
-  const handleNextStep = (e: React.FormEvent) => {
+  const handleNextStep = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (code.length !== 24) return;
-    setStep(2);
+    if (code.length < 5) return;
+    
+    setLoadingEvent(true);
+    try {
+      const response = await fetch(`/api/event/public/${code}`);
+      const data = await response.json();
+      
+      if (response.ok && data.event) {
+        setEventDetails(data.event);
+        setStep(2);
+      } else {
+        alert(data.error || "Event not found. Please check the ID.");
+      }
+    } catch (error) {
+      console.error("Error fetching event:", error);
+      alert("Failed to verify event. Please try again.");
+    } finally {
+      setLoadingEvent(false);
+    }
   };
 
   const handleJoin = async (e: React.FormEvent) => {
@@ -92,16 +111,22 @@ export default function JoinPage() {
 
                 <button
                   type="submit"
-                  disabled={code.length !== 24}
+                  disabled={code.length < 5 || loadingEvent}
                   className={cn(
                     "w-full h-16 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all duration-300 shadow-xl",
-                    code.length === 24
+                    code.length >= 5 && !loadingEvent
                       ? "bg-eventeev-orange text-white hover:scale-[1.02] active:scale-[0.98]"
                       : "bg-slate-200 text-slate-400 cursor-not-allowed"
                   )}
                 >
-                  Continue
-                  <ArrowRight className="w-5 h-5" />
+                  {loadingEvent ? (
+                    <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      Continue
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                  )}
                 </button>
               </motion.form>
             )}
@@ -116,6 +141,17 @@ export default function JoinPage() {
                 onSubmit={handleJoin}
                 className="space-y-4 absolute w-full"
               >
+                {eventDetails && (
+                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-left space-y-1 mb-4 shadow-sm">
+                    <p className="text-xs text-slate-400 uppercase tracking-widest font-bold">Joining Event</p>
+                    <p className="text-eventeev-navy font-bold text-lg leading-tight truncate">{eventDetails.title}</p>
+                    <div className="flex flex-col gap-1 mt-2 text-sm text-slate-500 font-medium">
+                      <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-eventeev-orange" /> {new Date(eventDetails.date).toLocaleDateString()}</span>
+                      <span className="flex items-center gap-2 truncate"><div className="w-1.5 h-1.5 rounded-full bg-eventeev-orange" /> {eventDetails.location}</span>
+                    </div>
+                  </div>
+                )}
+                
                 <div className="relative">
                   <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   <input

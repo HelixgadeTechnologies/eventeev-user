@@ -3,8 +3,8 @@
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname } from '@/i18n/routing';
-import { Home, Users, MessageSquare, Mic2, FileText, Bell } from 'lucide-react';
+import { usePathname, useRouter } from '@/i18n/routing';
+import { Home, Users, MessageSquare, Mic2, FileText, Bell, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import LanguageSwitcher from '../LanguageSwitcher';
 
@@ -18,6 +18,12 @@ const NAV_ITEMS = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    router.push("/");
+  };
 
   return (
     <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-100 h-screen sticky top-0 left-0 p-6">
@@ -58,6 +64,14 @@ export function Sidebar() {
             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-orange-500 rounded-full border-2 border-white" />
           </div>
           <span className="font-bold">Notifications</span>
+        </button>
+
+        <button 
+          onClick={handleLogout}
+          className="flex items-center gap-3 w-full px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl transition-all"
+        >
+          <LogOut className="w-5 h-5" />
+          <span className="font-bold">Log out</span>
         </button>
 
         <div className="bg-slate-50 rounded-2xl p-4">
