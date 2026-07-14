@@ -17,7 +17,7 @@ export default function JoinPage() {
 
   const handleNextStep = (e: React.FormEvent) => {
     e.preventDefault();
-    if (code.length < 4) return;
+    if (code.length !== 24) return;
     setStep(2);
   };
 
@@ -64,7 +64,7 @@ export default function JoinPage() {
             <Image src="/icons/eventeev-logo.png" alt="Eventeev Logo" width={200} height={60} className="object-contain" />
           </div>
           <p className="text-eventeev-slate text-lg font-medium">
-            {step === 1 ? "Enter your event code to join the ecosystem." : "Provide your details to continue."}
+            {step === 1 ? "Enter your Event ID to join the ecosystem." : "Provide your details to continue."}
           </p>
         </div>
 
@@ -84,18 +84,18 @@ export default function JoinPage() {
                   <input
                     type="text"
                     value={code}
-                    onChange={(e) => setCode(e.target.value.toUpperCase())}
-                    placeholder="EVENT CODE (e.g. EVT2026)"
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder="EVENT ID (e.g. 60d5ec...)"
                     className="w-full h-16 px-6 bg-slate-50 border-2 border-slate-100 rounded-2xl text-xl font-bold tracking-widest text-eventeev-navy focus:border-eventeev-orange focus:bg-white focus:outline-none transition-all duration-300 placeholder:text-slate-300 placeholder:tracking-normal placeholder:font-medium"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  disabled={code.length < 4}
+                  disabled={code.length !== 24}
                   className={cn(
                     "w-full h-16 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all duration-300 shadow-xl",
-                    code.length >= 4
+                    code.length === 24
                       ? "bg-eventeev-orange text-white hover:scale-[1.02] active:scale-[0.98]"
                       : "bg-slate-200 text-slate-400 cursor-not-allowed"
                   )}
@@ -165,7 +165,7 @@ export default function JoinPage() {
                   disabled={loading}
                   className="text-slate-400 font-medium text-sm hover:text-slate-600 transition-colors"
                 >
-                  Back to Event Code
+                  Back to Event ID
                 </button>
               </motion.form>
             )}

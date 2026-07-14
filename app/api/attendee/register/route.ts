@@ -16,17 +16,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Name, email, and eventId are required" }, { status: 400 });
     }
 
-    const isValidId = mongoose.isValidObjectId(eventId);
-    const objectId = isValidId ? new mongoose.Types.ObjectId(eventId) : null;
+    // Clean the eventId by removing any accidental spaces
+    const cleanEventId = eventId.trim();
     
-    // Since eventId might be a short code (slug) or an ObjectId, we search by slug (case-insensitive) or _id
-    const event = await Event.findOne({
-      $or: [
-        { slug: new RegExp(`^${eventId}$`, 'i') },
-        ...(objectId ? [{ _id: objectId }] : [])
-      ]
-    });
+    // Validate that the input is a valid MongoDB ObjectId
+    const isValidId = mongoose.isValidObjectId(cleanEventId);
+    if (!isValidId) {
+      return NextResponse.json({ error: "Invalid Event ID format. Must be a 24-character hex string." }, { status: 400 });
+    }
+
+    // Log what we are searching for
+    console.log("Searching for Event ID:", cleanEventId);
+
+    // We strictly search by Event ID
+    const event = await Event.findById(cleanEventId);
+    
     if (!event) {
+      console.log("Event not found for eventId:", eventId);
       return NextResponse.json({ error: "Event not found. Please check your code." }, { status: 404 });
     }
 
