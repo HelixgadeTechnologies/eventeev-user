@@ -1,7 +1,13 @@
 import createNextIntlPlugin from 'next-intl/plugin';
 import type { NextConfig } from "next";
+import withPWAInit from "next-pwa";
 
 const withNextIntl = createNextIntlPlugin();
+
+const withPWA = withPWAInit({
+  dest: "public",
+  disable: process.env.NODE_ENV === "development",
+});
 
 const nextConfig: NextConfig = {
   images: {
@@ -9,4 +15,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withNextIntl(nextConfig);
+export default withPWA(withNextIntl(nextConfig));
