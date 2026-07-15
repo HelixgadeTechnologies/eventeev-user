@@ -20,7 +20,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const anyEvent = await Event.findOne({
       $or: [
         { slug: new RegExp(`^${cleanId}$`, 'i') },
-        { title: new RegExp(`^${cleanId}$`, 'i') },
         ...(mongoose.isValidObjectId(cleanId) ? [{ _id: cleanId }] : [])
       ]
     });
@@ -30,7 +29,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const event = await Event.findOne({ 
       $or: [
         { slug: new RegExp(`^${cleanId}$`, 'i') },
-        { title: new RegExp(`^${cleanId}$`, 'i') },
         ...(mongoose.isValidObjectId(cleanId) ? [{ _id: cleanId }] : [])
       ],
       published: true 
