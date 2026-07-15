@@ -23,7 +23,8 @@ export default function JoinPage() {
     
     setLoadingEvent(true);
     try {
-      const response = await fetch(`/api/event/public/${code}`);
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const response = await fetch(`${baseUrl}/api/event/public/${code}`);
       const data = await response.json();
       
       if (response.ok && data.event) {
@@ -46,7 +47,8 @@ export default function JoinPage() {
     
     setLoading(true);
     try {
-      const response = await fetch("/api/attendee/register", {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const response = await fetch(`${baseUrl}/api/attendee/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, name: fullName, eventId: code }),
