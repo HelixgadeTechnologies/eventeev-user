@@ -9,7 +9,7 @@ export interface IEvent extends Document {
   isPaid: boolean;
   price?: number;
   speakers?: string[];
-  published: boolean;
+  status: string;
   createdAt: Date;
 }
 
@@ -22,7 +22,7 @@ const EventSchema: Schema = new Schema({
   isPaid: { type: Boolean, default: false },
   price: { type: Number },
   speakers: [{ type: String }],
-  published: { type: Boolean, default: false },
+  status: { type: String, default: "Draft" },
   createdAt: { type: Date, default: Date.now },
 }, {
   toJSON: { virtuals: true },

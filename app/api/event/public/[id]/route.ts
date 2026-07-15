@@ -14,9 +14,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     console.log("Searching for event code:", cleanId);
     
     const allEvents = await Event.find({}).limit(5);
-    console.log("First 5 events in DB:", allEvents.map(e => ({ title: e.title, slug: e.slug, published: e.published, id: e._id })));
+    console.log("First 5 events in DB:", allEvents.map(e => ({ title: e.title, slug: e.slug, status: e.status, id: e._id })));
 
-    // Check if it exists at all, regardless of published status
+    // Check if it exists at all, regardless of status
     const anyEvent = await Event.findOne({
       $or: [
         { slug: new RegExp(`^${cleanId}$`, 'i') },
@@ -24,14 +24,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       ]
     });
     
-    console.log("Did we find it regardless of published status?", anyEvent ? `YES - Published: ${anyEvent.published}` : "NO");
+    console.log("Did we find it regardless of status?", anyEvent ? `YES - Status: ${anyEvent.status}` : "NO");
 
     const event = await Event.findOne({ 
       $or: [
         { slug: new RegExp(`^${cleanId}$`, 'i') },
         ...(mongoose.isValidObjectId(cleanId) ? [{ _id: cleanId }] : [])
       ],
-      published: true 
+      status: "Published" 
     });
     
     if (!event) {
