@@ -1,14 +1,19 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env.local") });
 
-async function check() {
-  const uri = 'mongodb+srv://weareeventeev:Helixgade077%40@cluster0.tlihb.mongodb.net/eventeev?appName=Cluster0';
-  await mongoose.connect(uri);
+async function checkDb() {
+  await mongoose.connect(process.env.MONGODB_URI);
+  
   const db = mongoose.connection.db;
+  const events = await db.collection("events").find({}).toArray();
   
-  const events = await db.collection('events').find({}).toArray();
-  console.log("All events:");
-  events.forEach(e => console.log(JSON.stringify(e)));
+  console.log("All events in DB:");
+  events.forEach(e => {
+    console.log(`- Title: ${e.title}, Slug: ${e.slug}, Published: ${e.published}`);
+  });
   
-  process.exit(0);
+  mongoose.disconnect();
 }
-check().catch(console.error);
+
+checkDb().catch(console.error);

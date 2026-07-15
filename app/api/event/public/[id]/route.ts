@@ -10,6 +10,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const cleanId = id.trim();
     
+    console.log("=== PUBLIC API FETCH ===");
+    console.log("Searching for event code:", cleanId);
+    
+    const allEvents = await Event.find({}).limit(5);
+    console.log("First 5 events in DB:", allEvents.map(e => ({ title: e.title, slug: e.slug, published: e.published, id: e._id })));
+
+    // Check if it exists at all, regardless of published status
+    const anyEvent = await Event.findOne({
+      $or: [
+        { slug: new RegExp(`^${cleanId}$`, 'i') },
+        { title: new RegExp(`^${cleanId}$`, 'i') },
+        ...(mongoose.isValidObjectId(cleanId) ? [{ _id: cleanId }] : [])
+      ]
+    });
+    
+    console.log("Did we find it regardless of published status?", anyEvent ? `YES - Published: ${anyEvent.published}` : "NO");
+
     const event = await Event.findOne({ 
       $or: [
         { slug: new RegExp(`^${cleanId}$`, 'i') },
@@ -20,8 +37,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     });
     
     if (!event) {
+      console.log("Returning 404 because event not found (or not published).");
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
+    
+    console.log("Returning event successfully!");
 
     return NextResponse.json({ event });
   } catch (error) {
