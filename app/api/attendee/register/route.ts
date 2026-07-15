@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
     const event = await Event.findOne({
       $or: [
         { slug: new RegExp(`^${cleanEventId}$`, 'i') },
+        { connectCode: new RegExp(`^${cleanEventId}$`, 'i') },
         { title: new RegExp(`^${cleanEventId}$`, 'i') },
         ...(mongoose.isValidObjectId(cleanEventId) ? [{ _id: cleanEventId }] : [])
       ]

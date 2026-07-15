@@ -28,7 +28,7 @@ export function Sidebar() {
   return (
     <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-100 h-screen sticky top-0 left-0 p-6">
       <div className="flex items-center gap-3 mb-10 px-2">
-        <Image src="/icons/eventeev-logo.png" alt="Eventeev Logo" width={140} height={40} className="object-contain" />
+        <Image src="/icons/eventeev-logo.png" alt="Eventeev Logo" width={140} height={40} className="object-contain" priority style={{ width: 'auto', height: 'auto' }} />
       </div>
 
       <nav className="flex-1 space-y-2">

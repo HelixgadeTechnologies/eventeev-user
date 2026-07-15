@@ -17,7 +17,7 @@ export function Header() {
   return (
     <header className="fixed top-0 left-0 right-0 h-16 glass z-50 flex items-center justify-between px-6 border-b border-white/20 lg:hidden">
       <div className="flex items-center gap-2">
-        <Image src="/icons/eventeev-logo.png" alt="Eventeev Logo" width={120} height={32} className="object-contain" />
+        <Image src="/icons/eventeev-logo.png" alt="Eventeev Logo" width={120} height={32} className="object-contain" priority style={{ width: 'auto', height: 'auto' }} />
       </div>
       
       <div className="flex items-center gap-3">

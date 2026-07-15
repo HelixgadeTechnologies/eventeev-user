@@ -29,6 +29,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const event = await Event.findOne({ 
       $or: [
         { slug: new RegExp(`^${cleanId}$`, 'i') },
+        { connectCode: new RegExp(`^${cleanId}$`, 'i') },
         ...(mongoose.isValidObjectId(cleanId) ? [{ _id: cleanId }] : [])
       ],
       status: "Published" 

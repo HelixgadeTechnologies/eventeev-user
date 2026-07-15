@@ -28,11 +28,14 @@ export default function JoinPage() {
       const response = await fetch(`${baseUrl}/api/event/public/${code}`);
       const data = await response.json();
       
-      if (response.ok && data.event) {
-        setEventDetails(data.event);
+      // The local API returns { event: {...} }, but the live backend returns the event object directly (with _id)
+      const eventData = data.event || (data._id ? data : null);
+      
+      if (response.ok && eventData) {
+        setEventDetails(eventData);
         setStep(2);
       } else {
-        setError(data.error || "Event not found. Please check the ID.");
+        setError(data.message || data.error || "Event not found. Please check the ID.");
       }
     } catch (err) {
       console.error("Error fetching event:", err);
@@ -83,7 +86,7 @@ export default function JoinPage() {
       >
         <div className="mb-12">
           <div className="flex items-center justify-center mx-auto mb-6">
-            <Image src="/icons/eventeev-logo.png" alt="Eventeev Logo" width={200} height={60} className="object-contain" />
+            <Image src="/icons/eventeev-logo.png" alt="Eventeev Logo" width={200} height={60} className="object-contain" priority style={{ width: 'auto', height: 'auto' }} />
           </div>
           <p className="text-eventeev-slate text-lg font-medium">
             {step === 1 ? "Enter your Event ID to join the ecosystem." : "Provide your details to continue."}
