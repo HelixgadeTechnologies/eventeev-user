@@ -15,6 +15,7 @@ export default function JoinPage() {
   const [loading, setLoading] = useState(false);
   const [loadingEvent, setLoadingEvent] = useState(false);
   const [eventDetails, setEventDetails] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   const handleNextStep = async (e: React.FormEvent) => {
@@ -31,11 +32,11 @@ export default function JoinPage() {
         setEventDetails(data.event);
         setStep(2);
       } else {
-        alert(data.error || "Event not found. Please check the ID.");
+        setError(data.error || "Event not found. Please check the ID.");
       }
-    } catch (error) {
-      console.error("Error fetching event:", error);
-      alert("Failed to verify event. Please try again.");
+    } catch (err) {
+      console.error("Error fetching event:", err);
+      setError("Failed to verify event. Please try again.");
     } finally {
       setLoadingEvent(false);
     }
@@ -63,12 +64,12 @@ export default function JoinPage() {
       } else {
         console.error("Failed to register:", data);
         setLoading(false);
-        alert(data.error || "Failed to register. Please try again.");
+        setError(data.error || "Failed to register. Please try again.");
       }
-    } catch (error) {
-      console.error("Error joining event:", error);
+    } catch (err) {
+      console.error("Error joining event:", err);
       setLoading(false);
-      alert("An error occurred. Please try again.");
+      setError("An error occurred. Please try again.");
     }
   };
 
@@ -235,6 +236,42 @@ export default function JoinPage() {
           By joining, you agree to our <span className="text-slate-600 underline font-bold">Terms of Service</span>.
         </p>
       </div>
+
+      {/* Custom Error Modal */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden"
+            >
+              <div className="p-8 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-red-50 text-red-500 mx-auto flex items-center justify-center mb-6">
+                  <ShieldCheck className="w-8 h-8 opacity-0 hidden" />
+                  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-bold text-eventeev-navy mb-3">Oops!</h3>
+                <p className="text-slate-500 mb-8 font-medium leading-relaxed">{error}</p>
+                <button
+                  onClick={() => setError(null)}
+                  className="w-full h-14 bg-eventeev-navy text-white rounded-2xl font-bold text-lg hover:bg-slate-800 active:scale-[0.98] transition-all duration-300 shadow-xl shadow-slate-900/10"
+                >
+                  Got it
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
