@@ -24,6 +24,9 @@ const EventSchema: Schema = new Schema({
   speakers: [{ type: String }],
   published: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
+}, {
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
 });
 
 export default mongoose.models.Event || mongoose.model<IEvent>('Event', EventSchema);
