@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
-const uri = "mongodb+srv://weareeventeev:Helixgade077%40@cluster0.tlihb.mongodb.net/eventeev?appName=Cluster0";
+require("dotenv").config({ path: ".env.local" });
+const uri = process.env.MONGODB_URI;
 
 mongoose.connect(uri)
   .then(async () => {

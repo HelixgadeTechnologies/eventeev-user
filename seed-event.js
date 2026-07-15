@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
+require('dotenv').config({ path: '.env.local' });
 
-const MONGODB_URI = 'mongodb+srv://weareeventeev:Helixgade077%40@cluster0.tlihb.mongodb.net/eventeev?appName=Cluster0';
+const MONGODB_URI = process.env.MONGODB_URI;
 
 const EventSchema = new mongoose.Schema({
   title: String,
