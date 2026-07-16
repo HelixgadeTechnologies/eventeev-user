@@ -24,8 +24,7 @@ export default function DashboardPage() {
           return;
         }
 
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
-        const response = await fetch(`${baseUrl}/api/event/public/${storedEventId}`);
+        const response = await fetch(`/api/event/public/${storedEventId}`);
         const data = await response.json();
         
         const eventInfo = data.event || data;
@@ -55,7 +54,7 @@ export default function DashboardPage() {
       {/* Hero Banner */}
       <div className="relative h-72 w-full overflow-hidden rounded-b-[3rem] shadow-2xl">
         <img
-          src={eventData?.bannerUrl || MOCK_EVENT.banner}
+          src={eventData?.bannerImage || eventData?.bannerUrl || MOCK_EVENT.banner}
           alt={eventData?.title || MOCK_EVENT.title}
           className="absolute inset-0 w-full h-full object-cover"
         />
@@ -123,29 +122,38 @@ export default function DashboardPage() {
           </div>
           
           <div className="space-y-4">
-            {MOCK_EVENT.schedule.map((item, i) => (
-              <motion.div 
-                key={i}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className={cn(
-                  "p-5 rounded-3xl flex items-center gap-6 border transition-all duration-300",
-                  i === 0 ? "bg-white border-eventeev-orange shadow-lg" : "bg-slate-50 border-transparent"
-                )}
-              >
-                <div className="flex flex-col items-center">
-                  <span className="text-[10px] font-black text-slate-400 uppercase">{item.time.split(" ")[1]}</span>
-                  <span className="text-lg font-black text-eventeev-navy leading-none">{item.time.split(" ")[0]}</span>
-                </div>
-                <div className="flex-1">
-                  <p className={cn("text-sm font-bold", i === 0 ? "text-eventeev-orange" : "text-eventeev-navy")}>
-                    {item.activity}
-                  </p>
-                  {i === 0 && <p className="text-[10px] text-slate-400 font-medium uppercase mt-1">{t('happeningNow')}</p>}
-                </div>
-              </motion.div>
-            ))}
+            {eventData?.schedule && eventData.schedule.length > 0 ? (
+              eventData.schedule.map((item: any, i: number) => (
+                <motion.div 
+                  key={item.id || i}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                  className={cn(
+                    "p-5 rounded-3xl flex items-center gap-6 border transition-all duration-300",
+                    i === 0 ? "bg-white border-eventeev-orange shadow-lg" : "bg-slate-50 border-transparent"
+                  )}
+                >
+                  <div className="flex flex-col items-center">
+                    <span className="text-[10px] font-black text-slate-400 uppercase">{item.endTime ? 'END' : 'TIME'}</span>
+                    <span className="text-lg font-black text-eventeev-navy leading-none">{item.startTime || 'TBD'}</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className={cn("text-sm font-bold", i === 0 ? "text-eventeev-orange" : "text-eventeev-navy")}>
+                      {item.title || item.activity}
+                    </p>
+                    {item.speakers && item.speakers.length > 0 && (
+                      <p className="text-xs text-slate-500 font-medium mt-1">By {item.speakers[0].name}</p>
+                    )}
+                    {i === 0 && <p className="text-[10px] text-slate-400 font-medium uppercase mt-1">{t('happeningNow')}</p>}
+                  </div>
+                </motion.div>
+              ))
+            ) : (
+              <div className="text-center py-6 bg-slate-50 rounded-3xl border border-slate-100">
+                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Schedule Coming Soon</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -201,30 +209,36 @@ export default function DashboardPage() {
           </div>
           
           <div className="space-y-4">
-            {MOCK_RESOURCES.map((res, i) => (
-              <motion.div 
-                key={res.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className="p-4 bg-white rounded-3xl border border-slate-100 premium-shadow flex items-center justify-between"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-slate-50 rounded-2xl flex items-center justify-center">
-                    {res.type === "PDF" ? <FileText className="w-5 h-5 text-red-500" /> : 
-                     res.type === "Link" ? <LinkIcon className="w-5 h-5 text-blue-500" /> :
-                     <Download className="w-5 h-5 text-eventeev-orange" />}
+            {eventData?.resources && eventData.resources.length > 0 ? (
+              eventData.resources.map((res: any, i: number) => (
+                <motion.div 
+                  key={res.id || i}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                  className="p-4 bg-white rounded-3xl border border-slate-100 premium-shadow flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-slate-50 rounded-2xl flex items-center justify-center">
+                      {res.type === "PDF" ? <FileText className="w-5 h-5 text-red-500" /> : 
+                       res.type === "Link" ? <LinkIcon className="w-5 h-5 text-blue-500" /> :
+                       <Download className="w-5 h-5 text-eventeev-orange" />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-eventeev-navy">{res.title}</p>
+                      <p className="text-[10px] text-slate-400 font-black uppercase">{res.type} • {res.size || 'N/A'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-eventeev-navy">{res.title}</p>
-                    <p className="text-[10px] text-slate-400 font-black uppercase">{res.type} • {res.size}</p>
-                  </div>
-                </div>
-                <button className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 hover:text-eventeev-orange transition-colors">
-                  <Download className="w-4 h-4" />
-                </button>
-              </motion.div>
-            ))}
+                  <button className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 hover:text-eventeev-orange transition-colors">
+                    <Download className="w-4 h-4" />
+                  </button>
+                </motion.div>
+              ))
+            ) : (
+              <div className="text-center py-6 bg-slate-50 rounded-3xl border border-slate-100">
+                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No resources uploaded</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

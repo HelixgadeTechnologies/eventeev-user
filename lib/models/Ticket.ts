@@ -5,7 +5,7 @@ export interface ITicket extends Document {
   eventId: mongoose.Types.ObjectId;
   orderId: string;
   tier?: string;
-  status: 'valid' | 'used' | 'cancelled';
+  status: 'valid' | 'used' | 'cancelled' | 'pending';
   createdAt: Date;
 }
 
@@ -14,7 +14,7 @@ const TicketSchema: Schema = new Schema({
   eventId: { type: Schema.Types.ObjectId, ref: 'Event', required: true },
   orderId: { type: String, required: true, unique: true },
   tier: { type: String, default: 'General Admission' },
-  status: { type: String, enum: ['valid', 'used', 'cancelled'], default: 'valid' },
+  status: { type: String, enum: ['valid', 'used', 'cancelled', 'pending'], default: 'valid' },
   createdAt: { type: Date, default: Date.now },
 });
 

@@ -10,7 +10,20 @@ import mongoose from "mongoose";
 export async function POST(req: NextRequest) {
   try {
     await dbConnect();
-    const { name, email, eventId } = await req.json();
+
+    // TEMPORARY FIX: Drop the problematic orderId index from the attendees collection
+    try {
+      if (mongoose.connection.db) {
+        await mongoose.connection.db.collection('attendees').dropIndex('orderId_1');
+        console.log('Successfully dropped orderId_1 index from attendees collection.');
+      }
+    } catch (e: any) {
+      if (e.code !== 27) { // 27 means IndexNotFound
+        console.error('Failed to drop index:', e.message);
+      }
+    }
+
+    const { name, email, eventId, ticketTier } = await req.json();
 
     if (!name || !email || !eventId) {
       return NextResponse.json({ error: "Name, email, and eventId are required" }, { status: 400 });
@@ -59,7 +72,7 @@ export async function POST(req: NextRequest) {
         attendeeId: attendee._id,
         eventId: event._id,
         orderId,
-        tier: "General Admission", // Default or you can pass it in req.json()
+        tier: ticketTier || "General Admission",
       });
     }
 

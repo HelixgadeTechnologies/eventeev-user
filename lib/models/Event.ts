@@ -27,6 +27,7 @@ const EventSchema: Schema = new Schema({
   status: { type: String, default: "Draft" },
   createdAt: { type: Date, default: Date.now },
 }, {
+  strict: false,
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
 });

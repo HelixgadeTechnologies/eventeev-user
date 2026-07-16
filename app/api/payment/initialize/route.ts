@@ -2,40 +2,50 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Event from "@/lib/models/Event";
 import Attendee from "@/lib/models/Attendee";
-import { verifyToken } from "@/lib/jwt";
+import Ticket from "@/lib/models/Ticket";
+import crypto from "crypto";
+import mongoose from "mongoose";
 
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const token = authHeader.split(' ')[1];
-    const decoded: any = verifyToken(token);
-    if (!decoded) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     await dbConnect();
-    const { eventId } = await req.json();
+    
+    // TEMPORARY FIX: Drop the problematic orderId index from the attendees collection
+    try {
+      if (mongoose.connection.db) {
+        await mongoose.connection.db.collection('attendees').dropIndex('orderId_1');
+      }
+    } catch (e: any) {}
 
-    if (!eventId) {
-      return NextResponse.json({ error: "Event ID is required" }, { status: 400 });
+    const { eventId, name, email, ticketTier, amount } = await req.json();
+
+    if (!eventId || !name || !email || !ticketTier || amount === undefined) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
     const event = await Event.findById(eventId);
-    const attendee = await Attendee.findById(decoded.id);
-
     if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
-    if (!attendee) return NextResponse.json({ error: "Attendee not found" }, { status: 404 });
-    if (!event.isPaid || !event.price) {
-      return NextResponse.json({ error: "Event is free, payment not required" }, { status: 400 });
+
+    // Find or create Attendee
+    let attendee = await Attendee.findOne({ email });
+    if (!attendee) {
+      attendee = await Attendee.create({ name, email });
     }
+
+    // Create a pending ticket
+    const orderId = `ORD-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+    const ticket = await Ticket.create({
+      attendeeId: attendee._id,
+      eventId: event._id,
+      orderId,
+      tier: ticketTier,
+      status: 'pending'
+    });
 
     // Initialize Paystack transaction
     const host = req.headers.get("origin") || "http://localhost:3000";
-    const amount = event.price * 100; // Assuming price is in NGN, converting to Kobo
+    // Using `amount * 100` if the frontend sends standard currency units
+    const koboAmount = Math.round(amount * 100);
 
     const response = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",
@@ -45,12 +55,13 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         email: attendee.email,
-        amount,
-        callback_url: `${host}/dashboard`,
+        amount: koboAmount,
+        callback_url: `${host}/payment/verify`,
         metadata: {
           custom_fields: [
             { display_name: "Event ID", variable_name: "event_id", value: event._id.toString() },
-            { display_name: "Attendee ID", variable_name: "attendee_id", value: attendee._id.toString() }
+            { display_name: "Attendee ID", variable_name: "attendee_id", value: attendee._id.toString() },
+            { display_name: "Ticket ID", variable_name: "ticket_id", value: ticket._id.toString() }
           ],
         },
       }),

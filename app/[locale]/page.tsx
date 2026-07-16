@@ -8,10 +8,12 @@ import { QrCode, ArrowRight, ShieldCheck, Mail, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function JoinPage() {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [code, setCode] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [loadingEvent, setLoadingEvent] = useState(false);
   const [eventDetails, setEventDetails] = useState<any>(null);
@@ -24,8 +26,7 @@ export default function JoinPage() {
     
     setLoadingEvent(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
-      const response = await fetch(`${baseUrl}/api/event/public/${code}`);
+      const response = await fetch(`/api/event/public/${code}`);
       const data = await response.json();
       
       // The local API returns { event: {...} }, but the live backend returns the event object directly (with _id)
@@ -51,32 +52,86 @@ export default function JoinPage() {
     
     setLoading(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
-      const response = await fetch(`${baseUrl}/api/attendee/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name: fullName, eventId: eventDetails?._id || eventDetails?.id || code }),
-      });
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://eventeevapi.onrender.com';
+      const actualEventId = eventDetails?._id || eventDetails?.id || code;
+      const response = await fetch(`${baseUrl}/api/ticket/event/${actualEventId}`);
       
-      const data = await response.json();
-      
-      if (response.ok && data.token) {
-        // Here we could store the token in localStorage or cookie
-        localStorage.setItem("token", data.token);
-        const actualEventId = eventDetails?._id || eventDetails?.id || code;
-        if (actualEventId) {
-          localStorage.setItem("eventId", actualEventId);
-        }
-        router.push("/dashboard");
+      if (response.ok) {
+        const data = await response.json();
+        // The API returns an array of tickets
+        setTickets(Array.isArray(data) ? data : []);
+        setStep(3);
       } else {
-        console.error("Failed to register:", data);
-        setLoading(false);
-        setError(data.error || "Failed to register. Please try again.");
+        setTickets([]);
+        setStep(3);
       }
     } catch (err) {
-      console.error("Error joining event:", err);
+      console.error("Error fetching tickets:", err);
+      setError("Failed to fetch tickets. Please try again.");
+    } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCheckout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTicket) return;
+    
+    setLoading(true);
+    try {
+      const eventId = eventDetails?._id || eventDetails?.id || code;
+      
+      if (selectedTicket.price > 0) {
+        // Paid Ticket Flow
+        const response = await fetch(`/api/payment/initialize`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            eventId, 
+            name: fullName, 
+            email, 
+            ticketTier: selectedTicket.name,
+            amount: selectedTicket.price
+          }),
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.authorization_url) {
+          window.location.href = data.authorization_url;
+        } else {
+          setError(data.error || "Failed to initialize payment.");
+          setLoading(false);
+        }
+      } else {
+        // Free Ticket Flow
+        const response = await fetch(`/api/attendee/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            email, 
+            name: fullName, 
+            eventId,
+            ticketTier: selectedTicket.name 
+          }),
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.token) {
+          localStorage.setItem("token", data.token);
+          localStorage.setItem("eventId", eventId);
+          router.push("/dashboard");
+        } else {
+          console.error("Failed to register:", data);
+          setError(data.error || "Failed to register. Please try again.");
+          setLoading(false);
+        }
+      }
+    } catch (err) {
+      console.error("Error during checkout:", err);
       setError("An error occurred. Please try again.");
+      setLoading(false);
     }
   };
 
@@ -93,7 +148,9 @@ export default function JoinPage() {
             <Image src="/icons/eventeev-logo.png" alt="Eventeev Logo" width={200} height={60} className="object-contain" priority style={{ width: 'auto', height: 'auto' }} />
           </div>
           <p className="text-eventeev-slate text-lg font-medium">
-            {step === 1 ? "Enter your Event ID to join the ecosystem." : "Provide your details to continue."}
+            {step === 1 && "Enter your Event ID to join the ecosystem."}
+            {step === 2 && "Provide your details to continue."}
+            {step === 3 && "Select a ticket to complete your registration."}
           </p>
         </div>
 
@@ -212,6 +269,77 @@ export default function JoinPage() {
                   className="text-slate-400 font-medium text-sm hover:text-slate-600 transition-colors"
                 >
                   Back to Event ID
+                </button>
+              </motion.form>
+            )}
+
+            {step === 3 && (
+              <motion.form
+                key="step3"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.3 }}
+                onSubmit={handleCheckout}
+                className="space-y-4 absolute w-full"
+              >
+                <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 pb-2 no-scrollbar">
+                  {tickets.length === 0 ? (
+                    <div className="bg-slate-50 border border-slate-100 rounded-xl p-6 text-center">
+                      <p className="text-slate-500 font-medium">No tickets available.</p>
+                    </div>
+                  ) : (
+                    tickets.filter((t: any) => !t.soldOut).map((ticket: any) => (
+                      <div 
+                        key={ticket.id || ticket._id} 
+                        onClick={() => setSelectedTicket(ticket)}
+                        className={cn(
+                          "cursor-pointer p-4 rounded-xl border-2 transition-all text-left flex justify-between items-center group",
+                          selectedTicket?.id === (ticket.id || ticket._id) 
+                            ? "border-eventeev-orange bg-orange-50 shadow-sm" 
+                            : "border-slate-100 bg-white hover:border-slate-200 hover:shadow-sm"
+                        )}
+                      >
+                        <div>
+                          <h4 className={cn("font-bold", selectedTicket?.id === (ticket.id || ticket._id) ? "text-eventeev-orange" : "text-eventeev-navy")}>{ticket.name}</h4>
+                          <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">{ticket.type}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-black text-lg text-eventeev-navy">
+                            {ticket.price > 0 ? `₦${ticket.price}` : 'FREE'}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!selectedTicket || loading}
+                  className={cn(
+                    "w-full h-16 mt-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all duration-300 shadow-xl",
+                    selectedTicket && !loading
+                      ? "bg-eventeev-orange text-white hover:scale-[1.02] active:scale-[0.98]"
+                      : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  )}
+                >
+                  {loading ? (
+                    <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      {selectedTicket?.price > 0 ? 'Proceed to Payment' : 'Complete Registration'}
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  disabled={loading}
+                  className="text-slate-400 font-medium text-sm hover:text-slate-600 transition-colors mt-2"
+                >
+                  Back to Details
                 </button>
               </motion.form>
             )}
