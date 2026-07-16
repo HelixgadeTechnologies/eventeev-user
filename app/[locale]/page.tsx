@@ -63,6 +63,10 @@ export default function JoinPage() {
       if (response.ok && data.token) {
         // Here we could store the token in localStorage or cookie
         localStorage.setItem("token", data.token);
+        const actualEventId = eventDetails?._id || eventDetails?.id || code;
+        if (actualEventId) {
+          localStorage.setItem("eventId", actualEventId);
+        }
         router.push("/dashboard");
       } else {
         console.error("Failed to register:", data);

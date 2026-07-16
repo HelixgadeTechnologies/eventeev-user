@@ -1,7 +1,8 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Calendar, MapPin, Bell, Trophy, Zap, ArrowRight, FileText, Download, Link as LinkIcon } from "lucide-react";
+import { Calendar, MapPin, Bell, Trophy, Zap, ArrowRight, FileText, Download, Link as LinkIcon, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { MOCK_EVENT, MOCK_RESOURCES } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -10,14 +11,52 @@ import { useTranslations } from 'next-intl';
 export default function DashboardPage() {
   const t = useTranslations('Dashboard');
   const c = useTranslations('Common');
+  
+  const [eventData, setEventData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchEvent = async () => {
+      try {
+        const storedEventId = localStorage.getItem("eventId");
+        if (!storedEventId) {
+          setLoading(false);
+          return;
+        }
+
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+        const response = await fetch(`${baseUrl}/api/event/public/${storedEventId}`);
+        const data = await response.json();
+        
+        const eventInfo = data.event || data;
+        if (response.ok && eventInfo) {
+          setEventData(eventInfo);
+        }
+      } catch (error) {
+        console.error("Failed to fetch event data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEvent();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader2 className="w-10 h-10 animate-spin text-eventeev-orange" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen">
       {/* Hero Banner */}
       <div className="relative h-72 w-full overflow-hidden rounded-b-[3rem] shadow-2xl">
         <img
-          src={MOCK_EVENT.banner}
-          alt={MOCK_EVENT.title}
+          src={eventData?.bannerUrl || MOCK_EVENT.banner}
+          alt={eventData?.title || MOCK_EVENT.title}
           className="absolute inset-0 w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-eventeev-navy/90 via-eventeev-navy/40 to-transparent" />
@@ -40,11 +79,11 @@ export default function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             className="text-3xl font-black text-white leading-tight mb-2"
           >
-            {MOCK_EVENT.title}
+            {eventData?.title || MOCK_EVENT.title}
           </motion.h1>
           <p className="text-white/80 text-sm font-medium flex items-center gap-4">
-            <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4 text-eventeev-orange" /> {MOCK_EVENT.date}</span>
-            <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-eventeev-orange" /> {MOCK_EVENT.location}</span>
+            <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4 text-eventeev-orange" /> {eventData?.startDate ? new Date(eventData.startDate).toLocaleDateString() : MOCK_EVENT.date}</span>
+            <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-eventeev-orange" /> {eventData?.location || MOCK_EVENT.location}</span>
           </p>
         </div>
       </div>
