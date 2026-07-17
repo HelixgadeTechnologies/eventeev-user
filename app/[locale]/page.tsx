@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "@/i18n/routing";
 import { motion, AnimatePresence } from "framer-motion";
-import { QrCode, ArrowRight, ShieldCheck, Mail, User } from "lucide-react";
+import { QrCode, ArrowRight, ShieldCheck, Mail, User, Calendar, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function JoinPage() {
@@ -141,7 +141,7 @@ export default function JoinPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="w-full max-w-sm"
+        className="w-full max-w-sm mb-24"
       >
         <div className="mb-12">
           <div className="flex items-center justify-center mx-auto mb-6">
@@ -164,7 +164,7 @@ export default function JoinPage() {
                 exit={{ opacity: 0, x: 20 }}
                 transition={{ duration: 0.3 }}
                 onSubmit={handleNextStep}
-                className="space-y-6 absolute w-full"
+                className="space-y-6 w-full"
               >
                 <div className="relative group">
                   <input
@@ -206,15 +206,53 @@ export default function JoinPage() {
                 exit={{ opacity: 0, x: 20 }}
                 transition={{ duration: 0.3 }}
                 onSubmit={handleJoin}
-                className="space-y-4 absolute w-full"
+                className="space-y-4 w-full"
               >
                 {eventDetails && (
-                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-left space-y-1 mb-4 shadow-sm">
-                    <p className="text-xs text-slate-400 uppercase tracking-widest font-bold">Joining Event</p>
-                    <p className="text-eventeev-navy font-bold text-lg leading-tight truncate">{eventDetails.title}</p>
-                    <div className="flex flex-col gap-1 mt-2 text-sm text-slate-500 font-medium">
-                      <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-eventeev-orange" /> {new Date(eventDetails.date).toLocaleDateString()}</span>
-                      <span className="flex items-center gap-2 truncate"><div className="w-1.5 h-1.5 rounded-full bg-eventeev-orange" /> {eventDetails.location}</span>
+                  <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden mb-6 shadow-sm text-left">
+                    {/* Banner Image */}
+                    <div className="relative h-32 w-full bg-slate-50">
+                      {(eventDetails.bannerImage || eventDetails.bannerUrl) ? (
+                        <img 
+                          src={eventDetails.bannerImage || eventDetails.bannerUrl} 
+                          alt={eventDetails.title} 
+                          className="absolute inset-0 w-full h-full object-cover" 
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
+                            <MapPin className="w-5 h-5 text-slate-300" />
+                          </div>
+                        </div>
+                      )}
+                      <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest text-eventeev-navy shadow-sm">
+                        Joining Event
+                      </div>
+                    </div>
+                    
+                    <div className="p-5 space-y-4">
+                      <div>
+                        <h3 className="text-xl font-bold text-eventeev-navy leading-tight">{eventDetails.title}</h3>
+                        {eventDetails.description && (
+                          <p className="text-sm text-slate-500 mt-2 line-clamp-2 leading-relaxed">
+                            {eventDetails.description}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <div className="flex items-start gap-3 text-sm text-slate-600 font-medium">
+                          <div className="mt-0.5 w-5 flex justify-center"><Calendar className="w-4 h-4 text-eventeev-orange" /></div>
+                          <div>
+                            {eventDetails.startDate ? new Date(eventDetails.startDate).toLocaleDateString() : new Date(eventDetails.date).toLocaleDateString()}
+                            {eventDetails.endDate && eventDetails.endDate !== eventDetails.startDate ? ` - ${new Date(eventDetails.endDate).toLocaleDateString()}` : ''}
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 text-sm text-slate-600 font-medium">
+                          <div className="mt-0.5 w-5 flex justify-center"><MapPin className="w-4 h-4 text-eventeev-orange" /></div>
+                          <span className="line-clamp-2">{eventDetails.location}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -281,7 +319,7 @@ export default function JoinPage() {
                 exit={{ opacity: 0, x: 20 }}
                 transition={{ duration: 0.3 }}
                 onSubmit={handleCheckout}
-                className="space-y-4 absolute w-full"
+                className="space-y-4 w-full"
               >
                 <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 pb-2 no-scrollbar">
                   {tickets.length === 0 ? (

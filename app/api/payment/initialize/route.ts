@@ -23,7 +23,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const event = await Event.findById(eventId);
+    const cleanEventId = eventId.trim();
+    const event = await Event.findOne({
+      $or: [
+        { slug: new RegExp(`^${cleanEventId}$`, 'i') },
+        { connectCode: new RegExp(`^${cleanEventId}$`, 'i') },
+        { title: new RegExp(`^${cleanEventId}$`, 'i') },
+        ...(mongoose.isValidObjectId(cleanEventId) ? [{ _id: cleanEventId }] : [])
+      ]
+    });
     if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
 
     // Find or create Attendee

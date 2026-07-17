@@ -18,4 +18,9 @@ const TicketSchema: Schema = new Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-export default mongoose.models.Ticket || mongoose.model<ITicket>('Ticket', TicketSchema);
+// Delete the model if it exists to prevent hot-reload caching issues with enums
+if (mongoose.models.Ticket) {
+  delete mongoose.models.Ticket;
+}
+
+export default mongoose.model<ITicket>('Ticket', TicketSchema);
