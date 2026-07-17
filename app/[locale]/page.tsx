@@ -212,9 +212,9 @@ export default function JoinPage() {
                   <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden mb-6 shadow-sm text-left">
                     {/* Banner Image */}
                     <div className="relative h-32 w-full bg-slate-50">
-                      {(eventDetails.bannerImage || eventDetails.bannerUrl) ? (
+                      {(eventDetails.thumbnailImage || eventDetails.bannerImage || eventDetails.bannerUrl) ? (
                         <img 
-                          src={eventDetails.bannerImage || eventDetails.bannerUrl} 
+                          src={eventDetails.thumbnailImage || eventDetails.bannerImage || eventDetails.bannerUrl} 
                           alt={eventDetails.title} 
                           className="absolute inset-0 w-full h-full object-cover" 
                         />

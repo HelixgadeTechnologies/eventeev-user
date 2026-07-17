@@ -54,7 +54,7 @@ export default function DashboardPage() {
       {/* Hero Banner */}
       <div className="relative h-72 w-full overflow-hidden rounded-b-[3rem] shadow-2xl">
         <img
-          src={eventData?.bannerImage || eventData?.bannerUrl || MOCK_EVENT.banner}
+          src={eventData?.thumbnailImage || eventData?.bannerImage || eventData?.bannerUrl || MOCK_EVENT.banner}
           alt={eventData?.title || MOCK_EVENT.title}
           className="absolute inset-0 w-full h-full object-cover"
         />
