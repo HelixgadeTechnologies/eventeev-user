@@ -11,9 +11,12 @@ import {
   Gamepad2, 
   BarChart2, 
   Link as LinkIcon, 
-  Globe
+  Globe,
+  LogOut,
+  User
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Home", icon: Home },
@@ -28,6 +31,32 @@ const NAV_ITEMS = [
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+        const res = await fetch("/api/attendee/me", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user);
+        }
+      } catch (err) {
+        console.error("Failed to fetch user", err);
+      }
+    };
+    fetchUser();
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("eventId");
+    window.location.href = "/";
+  };
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
@@ -60,11 +89,57 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             );
           })}
         </nav>
+        
+        {/* Desktop Profile Section */}
+        {user && (
+          <div className="p-4 border-t border-slate-100">
+            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
+              <div className="w-10 h-10 rounded-xl bg-eventeev-orange/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-5 h-5 text-eventeev-orange" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-eventeev-navy truncate">{user.name}</p>
+                <p className="text-xs font-medium text-slate-500 truncate">{user.email}</p>
+              </div>
+              <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-red-500 transition-colors" title="Logout">
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto pb-24 md:pb-0 relative">
-        {children}
+      <main className="flex-1 overflow-y-auto pb-24 md:pb-0 relative flex flex-col">
+        {/* Mobile Header */}
+        <div className="md:hidden flex items-center justify-between p-4 bg-white border-b border-slate-100 sticky top-0 z-40">
+          <h2 className="text-xl font-black text-eventeev-navy">Eventeev</h2>
+          {user && (
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <p className="text-sm font-bold text-eventeev-navy">{user.name}</p>
+              </div>
+              <div className="w-8 h-8 rounded-full bg-eventeev-orange/10 flex items-center justify-center overflow-hidden">
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-4 h-4 text-eventeev-orange" />
+                )}
+              </div>
+              <button onClick={handleLogout} className="text-slate-400 hover:text-red-500 p-1">
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 relative">
+          {children}
+        </div>
       </main>
 
       {/* Mobile Bottom Navigation */}
