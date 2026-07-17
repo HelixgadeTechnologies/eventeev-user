@@ -10,6 +10,7 @@ export interface IEvent extends Document {
   isPaid: boolean;
   price?: number;
   speakers?: string[];
+  dedicatedTrivia?: mongoose.Types.ObjectId;
   status: string;
   createdAt: Date;
 }
@@ -24,6 +25,7 @@ const EventSchema: Schema = new Schema({
   isPaid: { type: Boolean, default: false },
   price: { type: Number },
   speakers: [{ type: String }],
+  dedicatedTrivia: { type: Schema.Types.ObjectId, ref: 'Trivia' },
   status: { type: String, default: "Draft" },
   createdAt: { type: Date, default: Date.now },
 }, {
