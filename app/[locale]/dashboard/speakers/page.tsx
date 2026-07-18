@@ -16,13 +16,15 @@ export default function SpeakersPage() {
           return;
         }
 
-        const response = await fetch(`/api/event/public/${storedEventId}`);
-        const data = await response.json();
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://eventeevapi.onrender.com";
+        const response = await fetch(`${API_URL}/api/speaker/event/${storedEventId}`);
         
-        const eventInfo = data.event || data;
-        if (response.ok && eventInfo?.speakers) {
-          // Sometimes it's an array of strings, sometimes objects
-          const normalizedSpeakers = eventInfo.speakers.map((s: any) => 
+        if (response.ok) {
+          const data = await response.json();
+          // Assuming the backend returns an array or an object with the array
+          const speakersList = Array.isArray(data) ? data : data.speakers || [];
+          
+          const normalizedSpeakers = speakersList.map((s: any) => 
             typeof s === "string" ? { name: s, role: "Speaker", bio: "" } : s
           );
           setSpeakers(normalizedSpeakers);

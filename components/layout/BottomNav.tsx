@@ -2,25 +2,30 @@
 
 import Link from "next/link";
 import { usePathname } from "@/i18n/routing";
-import { Home, Users, MessageSquare, Mic2, FileText } from "lucide-react";
+import { Home, Users, MessageSquare, Mic2, FileText, Calendar, Gamepad2, BarChart2, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { label: "Home", icon: Home, href: "/dashboard" },
-  { label: "Network", icon: Users, href: "/networking" },
-  { label: "Chat", icon: MessageSquare, href: "/chat" },
-  { label: "Speakers", icon: Mic2, href: "/speakers" },
-  { label: "Resources", icon: FileText, href: "/resources" },
+  { label: "Schedule", icon: Calendar, href: "/dashboard/schedule" },
+  { label: "Speakers", icon: Mic2, href: "/dashboard/speakers" },
+  { label: "Network", icon: Globe, href: "/dashboard/networking" },
+  { label: "Chat", icon: MessageSquare, href: "/dashboard/chat" },
+  { label: "Games", icon: Gamepad2, href: "/dashboard/games" },
+  { label: "Polls", icon: BarChart2, href: "/dashboard/polls" },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 h-20 glass border-t border-white/20 px-6 flex items-center justify-between z-50 rounded-t-3xl shadow-2xl lg:hidden">
-      {NAV_ITEMS.map((item) => {
-        const isActive = pathname === item.href;
-        return (
+    <nav className="fixed bottom-0 left-0 right-0 h-20 glass border-t border-white/20 flex items-center overflow-x-auto no-scrollbar z-50 rounded-t-3xl shadow-2xl lg:hidden">
+      <div className="flex gap-2 px-4 items-center min-w-max mx-auto h-full">
+        {NAV_ITEMS.map((item) => {
+          const isActive = item.href === "/dashboard" 
+            ? pathname.endsWith("/dashboard") 
+            : pathname.includes(item.href);
+          return (
           <Link
             key={item.href}
             href={item.href}
@@ -37,6 +42,7 @@ export function BottomNav() {
           </Link>
         );
       })}
+      </div>
     </nav>
   );
 }

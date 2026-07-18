@@ -1,27 +1,51 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from '@/i18n/routing';
-import { Home, Users, MessageSquare, Mic2, FileText, Bell, LogOut } from 'lucide-react';
+import { Home, Users, MessageSquare, Mic2, FileText, Bell, LogOut, Calendar, Gamepad2, BarChart2, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import LanguageSwitcher from '../LanguageSwitcher';
 
 const NAV_ITEMS = [
   { label: "Home", icon: Home, href: "/dashboard" },
-  { label: "Network", icon: Users, href: "/networking" },
-  { label: "Chat", icon: MessageSquare, href: "/chat" },
-  { label: "Speakers", icon: Mic2, href: "/speakers" },
-  { label: "Resources", icon: FileText, href: "/resources" },
+  { label: "Schedule", icon: Calendar, href: "/dashboard/schedule" },
+  { label: "Speakers", icon: Mic2, href: "/dashboard/speakers" },
+  { label: "Networking", icon: Globe, href: "/dashboard/networking" },
+  { label: "Chat", icon: MessageSquare, href: "/dashboard/chat" },
+  { label: "Games", icon: Gamepad2, href: "/dashboard/games" },
+  { label: "Polls", icon: BarChart2, href: "/dashboard/polls" },
+  { label: "Resources", icon: FileText, href: "/dashboard/resources" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+        const res = await fetch("/api/attendee/me", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user);
+        }
+      } catch (err) {
+        console.error("Failed to fetch user", err);
+      }
+    };
+    fetchUser();
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("eventId");
     router.push("/");
   };
 
@@ -33,7 +57,10 @@ export function Sidebar() {
 
       <nav className="flex-1 space-y-2">
         {NAV_ITEMS.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = item.href === "/dashboard" 
+            ? pathname.endsWith("/dashboard") 
+            : pathname.includes(item.href);
+            
           return (
             <Link
               key={item.href}
@@ -77,12 +104,16 @@ export function Sidebar() {
         <div className="bg-slate-50 rounded-2xl p-4">
           <p className="text-xs text-slate-500 font-medium mb-2">Logged in as</p>
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-bold text-xs">
-              JD
+            <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-bold text-xs overflow-hidden">
+              {user?.avatarUrl ? (
+                <img src={user.avatarUrl} alt={user.name || "User"} className="w-full h-full object-cover" />
+              ) : (
+                user?.name?.charAt(0) || "U"
+              )}
             </div>
             <div className="overflow-hidden">
-              <p className="text-sm font-bold text-slate-900 truncate">John Doe</p>
-              <p className="text-[10px] text-slate-400 truncate">john@example.com</p>
+              <p className="text-sm font-bold text-slate-900 truncate">{user?.name || "Loading..."}</p>
+              <p className="text-[10px] text-slate-400 truncate">{user?.email || ""}</p>
             </div>
           </div>
         </div>
