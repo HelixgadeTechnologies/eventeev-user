@@ -63,8 +63,12 @@ export default function ChatPage() {
           headers: { "x-auth-token": token }
         });
         if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) setMessages(data);
+          const result = await res.json();
+          if (result && Array.isArray(result.data)) {
+            setMessages(result.data);
+          } else if (Array.isArray(result)) {
+            setMessages(result);
+          }
         }
       } catch (err) {
         console.error(err);
