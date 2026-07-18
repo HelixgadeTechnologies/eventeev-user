@@ -24,9 +24,18 @@ export default function SpeakersPage() {
           // Assuming the backend returns an array or an object with the array
           const speakersList = Array.isArray(data) ? data : data.speakers || [];
           
-          const normalizedSpeakers = speakersList.map((s: any) => 
-            typeof s === "string" ? { name: s, role: "Speaker", bio: "" } : s
-          );
+          const normalizedSpeakers = speakersList.map((s: any) => {
+            if (typeof s === "string") return { name: s, role: "Speaker", bio: "", photo: "" };
+            
+            const name = s.firstName && s.lastName ? `${s.firstName} ${s.lastName}` : s.name || "Unknown Speaker";
+            return {
+              ...s,
+              name,
+              role: s.title || s.role || "Speaker",
+              company: s.company || "",
+              photo: s.photo || s.imageUrl || ""
+            };
+          });
           setSpeakers(normalizedSpeakers);
         }
       } catch (error) {
@@ -75,27 +84,19 @@ export default function SpeakersPage() {
               key={i} 
               className="bg-white rounded-3xl premium-shadow border border-slate-100 overflow-hidden group"
             >
-              <div className="h-32 bg-slate-100 relative">
-                {speaker.coverImage && <img src={speaker.coverImage} className="w-full h-full object-cover opacity-50" />}
-                <div className="absolute -bottom-10 left-6">
-                  <div className="w-20 h-20 bg-white rounded-2xl p-1 shadow-lg">
-                    {speaker.image || speaker.avatar ? (
-                      <img src={speaker.image || speaker.avatar} alt={speaker.name} className="w-full h-full rounded-xl object-cover" />
-                    ) : (
-                      <div className="w-full h-full rounded-xl bg-eventeev-orange/20 flex items-center justify-center text-eventeev-orange font-black text-2xl">
-                        {speaker.name?.charAt(0) || "S"}
-                      </div>
-                    )}
-                  </div>
-                </div>
+              <div className="h-48 bg-slate-100 overflow-hidden">
+                <img 
+                  src={speaker.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(speaker.name)}&background=random&color=fff`} 
+                  alt={speaker.name}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                />
               </div>
-              <div className="p-6 pt-14">
-                <h3 className="text-xl font-black text-eventeev-navy mb-1">{speaker.name}</h3>
-                {speaker.role && (
-                  <p className="text-sm font-bold text-eventeev-orange flex items-center gap-1.5 mb-3">
-                    <Briefcase className="w-4 h-4" /> {speaker.role} {speaker.company && `at ${speaker.company}`}
-                  </p>
-                )}
+              
+              <div className="p-6">
+                <h3 className="text-xl font-black text-eventeev-navy mb-1 line-clamp-1">{speaker.name}</h3>
+                <p className="text-sm font-bold text-eventeev-orange mb-3 line-clamp-1">
+                  {speaker.role} {speaker.company ? `• ${speaker.company}` : ''}
+                </p>
                 {speaker.bio && (
                   <p className="text-sm font-medium text-slate-500 line-clamp-3">
                     {speaker.bio}
