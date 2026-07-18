@@ -6,8 +6,12 @@ import { cn } from "@/lib/utils";
 export default function PollsPage() {
   const [polls, setPolls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [votingOn, setVotingOn] = useState<string | null>(null);
+  const [submittingPoll, setSubmittingPoll] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [votedPolls, setVotedPolls] = useState<Record<string, boolean>>({});
+  
+  // Track selected options: { [pollId_questionId]: optionId }
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const fetchPolls = async () => {
@@ -25,6 +29,12 @@ export default function PollsPage() {
           const data = await res.json();
           if (Array.isArray(data)) setPolls(data);
         }
+        
+        // Load locally saved voted polls
+        const savedVotes = localStorage.getItem("eventeev_voted_polls");
+        if (savedVotes) {
+          setVotedPolls(JSON.parse(savedVotes));
+        }
       } catch (err) {
         console.error("Failed to fetch polls:", err);
       } finally {
@@ -34,23 +44,42 @@ export default function PollsPage() {
     fetchPolls();
   }, []);
 
-  const handleVote = async (pollId: string, questionId: string, optionId: string) => {
+  const handleOptionSelect = (pollId: string, questionId: string, optionId: string) => {
+    setSelectedOptions(prev => ({
+      ...prev,
+      [`${pollId}_${questionId}`]: optionId
+    }));
+  };
+
+  const submitAllVotes = async (poll: any) => {
     try {
-      setVotingOn(pollId);
+      setSubmittingPoll(poll._id);
       const token = localStorage.getItem("token");
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://eventeevapi.onrender.com";
       
-      const res = await fetch(`${API_URL}/api/poll/${pollId}/vote`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { "x-auth-token": token } : {})
-        },
-        body: JSON.stringify({ questionId, optionId })
-      });
+      const votePromises = [];
+      
+      // Submit vote for each question in this poll that has a selected option
+      for (const q of poll.questions) {
+        const optionId = selectedOptions[`${poll._id}_${q._id}`];
+        if (optionId) {
+          votePromises.push(
+            fetch(`${API_URL}/api/poll/${poll._id}/vote`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(token ? { "x-auth-token": token } : {})
+              },
+              body: JSON.stringify({ questionId: q._id, optionId })
+            })
+          );
+        }
+      }
 
-      if (res.ok) {
-        // Optimistically update poll data or just refetch
+      if (votePromises.length > 0) {
+        await Promise.all(votePromises);
+        
+        // Refetch polls to get updated vote counts
         const updatedPollsRes = await fetch(`${API_URL}/api/poll/event/${localStorage.getItem("eventId")}`, {
           headers: token ? { "x-auth-token": token } : {}
         });
@@ -59,17 +88,27 @@ export default function PollsPage() {
            if (Array.isArray(data)) setPolls(data);
         }
         setShowSuccessModal(true);
-      } else {
-        const errData = await res.json();
-        if (errData.message === "You have already voted on this question") {
-          // You could also show a toast here, but for now just console error
-          console.error("Already voted");
-        }
+        
+        // Record that user voted in this poll
+        setVotedPolls(prev => {
+          const updated = { ...prev, [poll._id]: true };
+          localStorage.setItem("eventeev_voted_polls", JSON.stringify(updated));
+          return updated;
+        });
+        
+        // Clear selected options for this poll
+        setSelectedOptions(prev => {
+          const next = { ...prev };
+          poll.questions.forEach((q: any) => {
+            delete next[`${poll._id}_${q._id}`];
+          });
+          return next;
+        });
       }
     } catch (err) {
       console.error(err);
     } finally {
-      setVotingOn(null);
+      setSubmittingPoll(null);
     }
   };
 
@@ -110,6 +149,11 @@ export default function PollsPage() {
                 )}>
                   {poll.status === "LIVE" ? "Live Now" : "Ended"}
                 </span>
+                {votedPolls[poll._id] && (
+                  <span className="text-xs font-bold text-eventeev-orange flex items-center gap-1 bg-eventeev-orange/10 px-3 py-1 rounded-full">
+                    <CheckCircle2 className="w-3 h-3" /> Voted
+                  </span>
+                )}
               </div>
               
               <h2 className="text-2xl font-black text-eventeev-navy mb-6">{poll.title || poll.name || "Poll"}</h2>
@@ -121,21 +165,45 @@ export default function PollsPage() {
                     {q.options && q.options.map((opt: any) => {
                       const totalVotes = q.options.reduce((sum: number, o: any) => sum + (o.votesCount || 0), 0);
                       const percent = totalVotes === 0 ? 0 : Math.round(((opt.votesCount || 0) / totalVotes) * 100);
+                      const isSelected = selectedOptions[`${poll._id}_${q._id}`] === opt._id;
+                      const hasVoted = votedPolls[poll._id];
                       
                       return (
                         <button
                           key={opt._id}
-                          disabled={poll.status !== "LIVE" || votingOn === poll._id}
-                          onClick={() => handleVote(poll._id, q._id, opt._id)}
-                          className="w-full relative bg-slate-50 border border-slate-100 rounded-2xl p-4 text-left overflow-hidden group hover:border-eventeev-orange transition-colors disabled:hover:border-slate-100"
+                          disabled={poll.status !== "LIVE" || submittingPoll === poll._id || hasVoted}
+                          onClick={() => handleOptionSelect(poll._id, q._id, opt._id)}
+                          className={cn(
+                            "w-full relative bg-slate-50 border rounded-2xl p-4 text-left overflow-hidden transition-colors",
+                            isSelected && !hasVoted ? "border-eventeev-orange shadow-md" : "border-slate-100",
+                            !hasVoted && "hover:border-eventeev-orange/50",
+                            hasVoted && "cursor-default"
+                          )}
                         >
-                          <div 
-                            className="absolute inset-y-0 left-0 bg-eventeev-orange/10 transition-all duration-1000"
-                            style={{ width: `${percent}%` }}
-                          />
+                          {(hasVoted || poll.status !== "LIVE") && (
+                            <div 
+                              className="absolute inset-y-0 left-0 bg-eventeev-orange/10 transition-all duration-1000"
+                              style={{ width: `${percent}%` }}
+                            />
+                          )}
                           <div className="relative z-10 flex justify-between items-center">
-                            <span className="font-bold text-eventeev-navy">{opt.text}</span>
-                            <span className="text-sm font-black text-eventeev-orange">{percent}%</span>
+                            <div className="flex items-center gap-3">
+                              {!hasVoted && poll.status === "LIVE" && (
+                                <div className={cn(
+                                  "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
+                                  isSelected ? "border-eventeev-orange" : "border-slate-300"
+                                )}>
+                                  {isSelected && <div className="w-2.5 h-2.5 bg-eventeev-orange rounded-full" />}
+                                </div>
+                              )}
+                              <span className="font-bold text-eventeev-navy">{opt.text}</span>
+                            </div>
+                            {(hasVoted || poll.status !== "LIVE") && (
+                              <span className="text-sm font-black text-eventeev-orange flex items-center gap-2">
+                                {percent}%
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">({opt.votesCount || 0} votes)</span>
+                              </span>
+                            )}
                           </div>
                         </button>
                       );
@@ -143,6 +211,24 @@ export default function PollsPage() {
                   </div>
                 </div>
               ))}
+
+              {!votedPolls[poll._id] ? (
+                <div className="mt-8 pt-6 border-t border-slate-100 flex justify-end">
+                  <button
+                    onClick={() => submitAllVotes(poll)}
+                    disabled={poll.status !== "LIVE" || submittingPoll === poll._id || !poll.questions?.some((q: any) => selectedOptions[`${poll._id}_${q._id}`])}
+                    className="px-8 py-3.5 bg-eventeev-navy hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white font-black rounded-2xl transition-all shadow-lg shadow-slate-900/10 flex items-center gap-2"
+                  >
+                    {submittingPoll === poll._id ? <Loader2 className="w-5 h-5 animate-spin" /> : "Submit Poll"}
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-8 pt-6 border-t border-slate-100 flex justify-center">
+                  <p className="text-sm font-bold text-slate-400 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-500" /> You've already voted in this poll
+                  </p>
+                </div>
+              )}
             </div>
           ))}
         </div>
