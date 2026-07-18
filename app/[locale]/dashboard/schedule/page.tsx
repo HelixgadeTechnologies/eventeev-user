@@ -18,14 +18,20 @@ export default function SchedulePage() {
           return;
         }
 
-        const response = await fetch(`/api/event/public/${storedEventId}`);
-        const data = await response.json();
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://eventeevapi.onrender.com";
+        const response = await fetch(`${API_URL}/api/schedule/event/${storedEventId}`);
         
-        const eventInfo = data.event || data;
-        if (response.ok && eventInfo?.schedule) {
-          setSchedule(eventInfo.schedule);
-          // Auto-select first unique date if dates are provided
-          const dates = Array.from(new Set(eventInfo.schedule.map((s: any) => s.date).filter(Boolean)));
+        if (response.ok) {
+          const scheduleData = await response.json();
+          // Format the dates so they can be grouped easily
+          const formattedSchedule = scheduleData.map((s: any) => ({
+            ...s,
+            formattedDate: new Date(s.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+          }));
+          
+          setSchedule(formattedSchedule);
+          
+          const dates = Array.from(new Set(formattedSchedule.map((s: any) => s.formattedDate).filter(Boolean)));
           if (dates.length > 0) setActiveDay(dates[0] as string);
         }
       } catch (error) {
@@ -47,8 +53,8 @@ export default function SchedulePage() {
   }
 
   // Filter schedule if days exist
-  const uniqueDates = Array.from(new Set(schedule.map(s => s.date).filter(Boolean))) as string[];
-  const displayedSchedule = activeDay ? schedule.filter(s => s.date === activeDay) : schedule;
+  const uniqueDates = Array.from(new Set(schedule.map(s => s.formattedDate).filter(Boolean))) as string[];
+  const displayedSchedule = activeDay ? schedule.filter(s => s.formattedDate === activeDay) : schedule;
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto">
@@ -111,9 +117,9 @@ export default function SchedulePage() {
                       <MapPin className="w-3 h-3" /> {item.location}
                     </span>
                   )}
-                  {item.speakers && item.speakers.length > 0 && (
+                  {item.speakerIds && item.speakerIds.length > 0 && (
                     <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
-                      <User className="w-3 h-3" /> {typeof item.speakers[0] === 'string' ? item.speakers[0] : item.speakers[0].name}
+                      <User className="w-3 h-3" /> {typeof item.speakerIds[0] === 'string' ? "Speaker Attached" : item.speakerIds[0].name}
                     </span>
                   )}
                 </div>
