@@ -7,6 +7,7 @@ export default function PollsPage() {
   const [polls, setPolls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [votingOn, setVotingOn] = useState<string | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   useEffect(() => {
     const fetchPolls = async () => {
@@ -56,6 +57,13 @@ export default function PollsPage() {
         if (updatedPollsRes.ok) {
            const data = await updatedPollsRes.json();
            if (Array.isArray(data)) setPolls(data);
+        }
+        setShowSuccessModal(true);
+      } else {
+        const errData = await res.json();
+        if (errData.message === "You have already voted on this question") {
+          // You could also show a toast here, but for now just console error
+          console.error("Already voted");
         }
       }
     } catch (err) {
@@ -137,6 +145,35 @@ export default function PollsPage() {
               ))}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center premium-shadow border border-slate-100 animate-in fade-in zoom-in duration-200">
+            <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h3 className="text-2xl font-black text-eventeev-navy mb-2">Vote Submitted!</h3>
+            <p className="text-slate-500 font-medium mb-8">
+              Your response has been successfully recorded. Thank you for participating!
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                className="w-full py-4 bg-slate-50 hover:bg-slate-100 text-eventeev-navy font-black rounded-2xl transition-colors"
+              >
+                Vote on Another Question
+              </button>
+              <button
+                onClick={() => window.location.href = "/dashboard"}
+                className="w-full py-4 bg-eventeev-navy hover:bg-slate-800 text-white font-black rounded-2xl transition-all shadow-lg shadow-slate-900/10"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
