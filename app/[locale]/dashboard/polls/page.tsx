@@ -111,8 +111,8 @@ export default function PollsPage() {
                   <h3 className="text-lg font-bold text-eventeev-navy mb-4">{q.text}</h3>
                   <div className="space-y-3">
                     {q.options && q.options.map((opt: any) => {
-                      const totalVotes = q.options.reduce((sum: number, o: any) => sum + (o.votes || 0), 0);
-                      const percent = totalVotes === 0 ? 0 : Math.round(((opt.votes || 0) / totalVotes) * 100);
+                      const totalVotes = q.options.reduce((sum: number, o: any) => sum + (o.votesCount || 0), 0);
+                      const percent = totalVotes === 0 ? 0 : Math.round(((opt.votesCount || 0) / totalVotes) * 100);
                       
                       return (
                         <button
