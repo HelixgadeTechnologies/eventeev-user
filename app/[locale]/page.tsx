@@ -52,6 +52,21 @@ export default function JoinPage() {
     
     setLoading(true);
     try {
+      // Authenticate user first to capture identity
+      const authResponse = await fetch("/api/attendee/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fullName, email }),
+      });
+      const authData = await authResponse.json();
+      if (authResponse.ok && authData.token) {
+        localStorage.setItem("token", authData.token);
+      } else {
+        setError(authData.error || "Failed to authenticate. Please try again.");
+        setLoading(false);
+        return;
+      }
+
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://eventeevapi.onrender.com';
       const actualEventId = eventDetails?._id || eventDetails?.id || code;
       const response = await fetch(`${baseUrl}/api/ticket/event/${actualEventId}`);
