@@ -74,7 +74,20 @@ export default function JoinPage() {
       if (response.ok) {
         const data = await response.json();
         // The API returns an array of tickets
-        setTickets(Array.isArray(data) ? data : []);
+        const fetchedTickets = Array.isArray(data) ? data : [];
+        
+        // Deduplicate tickets to prevent extra default ticket options
+        const uniqueTickets = [];
+        const seen = new Set();
+        for (const t of fetchedTickets) {
+          const key = `${t.name || 'General Admission'}-${t.type}-${t.price}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniqueTickets.push(t);
+          }
+        }
+        
+        setTickets(uniqueTickets);
         setStep(3);
       } else {
         setTickets([]);
