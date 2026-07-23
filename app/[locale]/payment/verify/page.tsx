@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@/i18n/routing";
+import { Loader2, CheckCircle2, XCircle, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function PaymentVerifyPage() {
@@ -27,15 +28,17 @@ export default function PaymentVerifyPage() {
 
         if (res.ok) {
           setStatus("success");
-          localStorage.setItem("token", data.token);
+          if (data.token) {
+            localStorage.setItem("token", data.token);
+          }
           if (data.eventId) {
-            localStorage.setItem("eventId", data.eventId);
+            localStorage.setItem("eventId", data.eventId.toString());
           }
           
-          // Redirect to dashboard after a short delay
+          // Auto redirect to event dashboard after short delay
           setTimeout(() => {
             router.push("/dashboard");
-          }, 2000);
+          }, 1500);
         } else {
           setStatus("error");
           setErrorMessage(data.error || "Payment verification failed.");
@@ -48,6 +51,10 @@ export default function PaymentVerifyPage() {
 
     verifyPayment();
   }, [reference, router]);
+
+  const handleGoToDashboard = () => {
+    router.push("/dashboard");
+  };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center bg-white">
@@ -73,8 +80,16 @@ export default function PaymentVerifyPage() {
             >
               <CheckCircle2 className="w-20 h-20 text-green-500" />
             </motion.div>
-            <h2 className="text-2xl font-bold text-eventeev-navy mt-4">Payment Successful!</h2>
-            <p className="text-slate-500 font-medium">Your ticket is confirmed. Redirecting to your dashboard...</p>
+            <h2 className="text-2xl font-bold text-eventeev-navy mt-2">Payment Successful!</h2>
+            <p className="text-slate-500 font-medium text-sm">Your ticket is confirmed! Redirecting to your event dashboard...</p>
+            
+            <button
+              onClick={handleGoToDashboard}
+              className="mt-6 w-full py-4 bg-eventeev-orange hover:bg-orange-600 text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-orange-500/20 active:scale-[0.98]"
+            >
+              Go to Event Dashboard
+              <ArrowRight className="w-5 h-5" />
+            </button>
           </div>
         )}
 
@@ -87,11 +102,11 @@ export default function PaymentVerifyPage() {
             >
               <XCircle className="w-20 h-20 text-red-500" />
             </motion.div>
-            <h2 className="text-2xl font-bold text-eventeev-navy mt-4">Payment Failed</h2>
-            <p className="text-slate-500 font-medium">{errorMessage}</p>
+            <h2 className="text-2xl font-bold text-eventeev-navy mt-4">Payment Verification Issue</h2>
+            <p className="text-slate-500 font-medium text-sm">{errorMessage}</p>
             <button
               onClick={() => router.push("/")}
-              className="mt-6 px-6 py-3 bg-eventeev-navy text-white rounded-xl font-bold hover:bg-slate-800 transition-colors"
+              className="mt-6 px-6 py-3.5 bg-eventeev-navy text-white rounded-2xl font-bold hover:bg-slate-800 transition-colors w-full"
             >
               Back to Home
             </button>

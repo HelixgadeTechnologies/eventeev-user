@@ -84,16 +84,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (!response.ok) {
-      return NextResponse.json({ error: "Payment initialization failed", details: data }, { status: response.status });
+      return NextResponse.json({ error: data.message || "Payment initialization failed", details: data }, { status: response.status });
     }
 
     if (data.status && data.data?.authorization_url) {
       return NextResponse.json({ authorization_url: data.data.authorization_url });
     } else {
-      return NextResponse.json({ error: "Invalid payment response" }, { status: 500 });
+      return NextResponse.json({ error: data.message || "Invalid payment response from Paystack" }, { status: 500 });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Payment Init Error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Internal server error" }, { status: 500 });
   }
 }

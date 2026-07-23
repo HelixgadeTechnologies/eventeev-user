@@ -64,8 +64,14 @@ export default function ResourcesPage() {
           {resources.map((res, i) => (
             <motion.a
               key={res.id || i}
-              href={res.url || "#"}
-              target={res.url ? "_blank" : "_self"}
+              href={res.url && res.url !== "#" ? res.url : undefined}
+              onClick={(e) => {
+                if (!res.url || res.url === "#") {
+                  e.preventDefault();
+                  alert("Resource file link is currently unavailable.");
+                }
+              }}
+              target={res.url && res.url !== "#" ? "_blank" : "_self"}
               rel="noopener noreferrer"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}

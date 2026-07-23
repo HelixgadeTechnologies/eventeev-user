@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "@/i18n/routing";
 import { motion, AnimatePresence } from "framer-motion";
-import { QrCode, ArrowRight, ShieldCheck, Mail, User, Calendar, MapPin } from "lucide-react";
+import { QrCode, ArrowRight, ShieldCheck, Mail, User, Calendar, MapPin, X, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function JoinPage() {
@@ -18,6 +18,8 @@ export default function JoinPage() {
   const [loadingEvent, setLoadingEvent] = useState(false);
   const [eventDetails, setEventDetails] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const router = useRouter();
 
   const handleNextStep = async (e: React.FormEvent) => {
@@ -52,7 +54,7 @@ export default function JoinPage() {
     
     setLoading(true);
     try {
-      // Authenticate user first to capture identity
+      // Step 1: Authenticate / create attendee record
       const authResponse = await fetch("/api/attendee/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -67,32 +69,60 @@ export default function JoinPage() {
         return;
       }
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://eventeevapi.onrender.com';
+      // Step 2: Check if this attendee already has a ticket for this event
       const actualEventId = eventDetails?._id || eventDetails?.id || code;
-      const response = await fetch(`${baseUrl}/api/ticket/event/${actualEventId}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        // The API returns an array of tickets
-        const fetchedTickets = Array.isArray(data) ? data : [];
-        
-        // Deduplicate tickets to prevent extra default ticket options
-        const uniqueTickets = [];
-        const seen = new Set();
-        for (const t of fetchedTickets) {
-          const key = `${t.name || 'General Admission'}-${t.type}-${t.price}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            uniqueTickets.push(t);
-          }
-        }
-        
-        setTickets(uniqueTickets);
-        setStep(3);
-      } else {
-        setTickets([]);
-        setStep(3);
+      const checkRes = await fetch(
+        `/api/attendee/check-event?email=${encodeURIComponent(email)}&eventId=${encodeURIComponent(actualEventId)}`
+      );
+      const checkData = await checkRes.json();
+
+      if (checkRes.ok && checkData.isAttendee) {
+        // Already registered — skip payment and go straight to dashboard
+        localStorage.setItem("token", checkData.token);
+        localStorage.setItem("eventId", checkData.eventId || actualEventId);
+        router.push("/dashboard");
+        return;
       }
+
+      // Step 3: Not yet registered — fetch available ticket tiers
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://eventeevapi.onrender.com';
+      
+      let fetchedTickets: any[] = [];
+      try {
+        const response = await fetch(`${baseUrl}/api/ticket/event/${actualEventId}`);
+        if (response.ok) {
+          const data = await response.json();
+          fetchedTickets = Array.isArray(data) ? data : [];
+        }
+      } catch (e) {
+        console.warn("Could not fetch tickets from backend API, building from event details.");
+      }
+
+      const uniqueTickets: any[] = [];
+      const seen = new Set();
+      for (const t of fetchedTickets) {
+        const ticketName = t.name || t.tier || t.title || 'General Admission';
+        const ticketPrice = t.price ?? t.amount ?? (eventDetails?.isPaid ? (eventDetails?.price || 5000) : 0);
+        const key = `${ticketName}-${t.type || 'Standard'}-${ticketPrice}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueTickets.push({ ...t, name: ticketName, price: ticketPrice, type: t.type || (ticketPrice > 0 ? 'Paid' : 'Free') });
+        }
+      }
+
+      if (uniqueTickets.length === 0) {
+        const defaultPrice = eventDetails?.isPaid ? (eventDetails?.price || 5000) : (eventDetails?.price || 0);
+        uniqueTickets.push({
+          id: 'default_tier_1',
+          name: defaultPrice > 0 ? 'Standard Ticket' : 'Free Admission',
+          price: defaultPrice,
+          type: defaultPrice > 0 ? 'Paid' : 'Free'
+        });
+      }
+
+      setTickets(uniqueTickets);
+      setSelectedTicket(uniqueTickets[0]);
+      setStep(3);
     } catch (err) {
       console.error("Error fetching tickets:", err);
       setError("Failed to fetch tickets. Please try again.");
@@ -108,8 +138,10 @@ export default function JoinPage() {
     setLoading(true);
     try {
       const eventId = eventDetails?._id || eventDetails?.id || code;
+      const ticketPrice = selectedTicket.price ?? selectedTicket.amount ?? (eventDetails?.isPaid ? (eventDetails?.price || 0) : 0);
+      const ticketTierName = selectedTicket.name || selectedTicket.tier || selectedTicket.title || "General Admission";
       
-      if (selectedTicket.price > 0) {
+      if (ticketPrice > 0) {
         // Paid Ticket Flow
         const response = await fetch(`/api/payment/initialize`, {
           method: "POST",
@@ -118,8 +150,8 @@ export default function JoinPage() {
             eventId, 
             name: fullName, 
             email, 
-            ticketTier: selectedTicket.name,
-            amount: selectedTicket.price
+            ticketTier: ticketTierName,
+            amount: ticketPrice
           }),
         });
         
@@ -128,7 +160,7 @@ export default function JoinPage() {
         if (response.ok && data.authorization_url) {
           window.location.href = data.authorization_url;
         } else {
-          setError(data.error || "Failed to initialize payment.");
+          setError(data.error || data.details?.message || "Failed to initialize payment.");
           setLoading(false);
         }
       } else {
@@ -140,7 +172,7 @@ export default function JoinPage() {
             email, 
             name: fullName, 
             eventId,
-            ticketTier: selectedTicket.name 
+            ticketTier: ticketTierName 
           }),
         });
         
@@ -355,28 +387,31 @@ export default function JoinPage() {
                       <p className="text-slate-500 font-medium">No tickets available.</p>
                     </div>
                   ) : (
-                    tickets.filter((t: any) => !t.soldOut).map((ticket: any) => (
-                      <div 
-                        key={ticket.id || ticket._id} 
-                        onClick={() => setSelectedTicket(ticket)}
-                        className={cn(
-                          "cursor-pointer p-4 rounded-xl border-2 transition-all text-left flex justify-between items-center group",
-                          selectedTicket?.id === (ticket.id || ticket._id) 
-                            ? "border-eventeev-orange bg-orange-50 shadow-sm" 
-                            : "border-slate-100 bg-white hover:border-slate-200 hover:shadow-sm"
-                        )}
-                      >
-                        <div>
-                          <h4 className={cn("font-bold", selectedTicket?.id === (ticket.id || ticket._id) ? "text-eventeev-orange" : "text-eventeev-navy")}>{ticket.name}</h4>
-                          <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">{ticket.type}</p>
+                    tickets.filter((t: any) => !t.soldOut).map((ticket: any) => {
+                      const isSelected = selectedTicket && ((selectedTicket.id && selectedTicket.id === (ticket.id || ticket._id)) || (selectedTicket._id && selectedTicket._id === (ticket.id || ticket._id)));
+                      return (
+                        <div 
+                          key={ticket.id || ticket._id} 
+                          onClick={() => setSelectedTicket(ticket)}
+                          className={cn(
+                            "cursor-pointer p-4 rounded-xl border-2 transition-all text-left flex justify-between items-center group",
+                            isSelected 
+                              ? "border-eventeev-orange bg-orange-50 shadow-sm" 
+                              : "border-slate-100 bg-white hover:border-slate-200 hover:shadow-sm"
+                          )}
+                        >
+                          <div>
+                            <h4 className={cn("font-bold", isSelected ? "text-eventeev-orange" : "text-eventeev-navy")}>{ticket.name}</h4>
+                            <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">{ticket.type}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-black text-lg text-eventeev-navy">
+                              {ticket.price > 0 ? `₦${ticket.price}` : 'FREE'}
+                            </p>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-black text-lg text-eventeev-navy">
-                            {ticket.price > 0 ? `₦${ticket.price}` : 'FREE'}
-                          </p>
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
 
@@ -423,7 +458,8 @@ export default function JoinPage() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="mt-8 flex items-center gap-3 mx-auto px-6 py-3 bg-white border border-slate-200 rounded-full shadow-sm hover:shadow-md transition-all text-slate-600 font-bold"
+              onClick={() => setShowQrModal(true)}
+              className="mt-8 flex items-center gap-3 mx-auto px-6 py-3 bg-white border border-slate-200 rounded-full shadow-sm hover:shadow-md transition-all text-slate-600 font-bold cursor-pointer"
             >
               <QrCode className="w-5 h-5 text-eventeev-orange" />
               Scan QR Code
@@ -434,9 +470,107 @@ export default function JoinPage() {
 
       <div className="absolute bottom-12 left-0 right-0 px-8">
         <p className="text-slate-400 text-xs font-medium">
-          By joining, you agree to our <span className="text-slate-600 underline font-bold">Terms of Service</span>.
+          By joining, you agree to our{" "}
+          <button 
+            onClick={() => setShowTermsModal(true)} 
+            className="text-slate-600 underline font-bold hover:text-eventeev-orange transition-colors cursor-pointer"
+          >
+            Terms of Service
+          </button>.
         </p>
       </div>
+
+      {/* QR Scanner Modal */}
+      <AnimatePresence>
+        {showQrModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden p-6 text-center relative"
+            >
+              <button 
+                onClick={() => setShowQrModal(false)} 
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-2 rounded-full bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <div className="w-16 h-16 rounded-2xl bg-orange-50 text-eventeev-orange mx-auto flex items-center justify-center mb-4">
+                <QrCode className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-eventeev-navy mb-2">QR Scanner</h3>
+              <p className="text-slate-500 text-sm mb-6 font-medium">
+                Point your camera at the event badge or QR poster, or enter your code below.
+              </p>
+              <div className="w-full h-40 bg-slate-900 rounded-2xl flex items-center justify-center text-white/50 mb-6 relative overflow-hidden">
+                <div className="absolute inset-0 border-2 border-eventeev-orange border-dashed m-4 rounded-xl animate-pulse" />
+                <span className="text-xs font-bold uppercase tracking-widest text-slate-300">Camera Viewfinder</span>
+              </div>
+              <button
+                onClick={() => setShowQrModal(false)}
+                className="w-full py-3.5 bg-eventeev-navy text-white rounded-2xl font-bold hover:bg-slate-800 transition-colors"
+              >
+                Close Scanner
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Terms of Service Modal */}
+      <AnimatePresence>
+        {showTermsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden p-6 text-left relative max-h-[80vh] flex flex-col"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-eventeev-orange" />
+                  <h3 className="text-xl font-bold text-eventeev-navy">Terms of Service</h3>
+                </div>
+                <button 
+                  onClick={() => setShowTermsModal(false)} 
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full bg-slate-100"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-4 text-sm text-slate-600 font-medium pr-2">
+                <p>Welcome to Eventeev! By registering for and using our platform at events, you agree to the following terms:</p>
+                <h4 className="font-bold text-eventeev-navy">1. Acceptable Use</h4>
+                <p>Attendees must use Eventeev responsibly. Harassment, unauthorized promotional content, or misuse of networking features is strictly prohibited.</p>
+                <h4 className="font-bold text-eventeev-navy">2. Privacy & Data</h4>
+                <p>Your profile information is shared only with event organizers and connection requests you explicitly accept within the Networking Hub.</p>
+                <h4 className="font-bold text-eventeev-navy">3. Event Tickets</h4>
+                <p>Tickets are non-transferable unless permitted by the event organizer. All digital tickets are stored securely under your account.</p>
+              </div>
+              <div className="pt-4 border-t border-slate-100 mt-4">
+                <button
+                  onClick={() => setShowTermsModal(false)}
+                  className="w-full py-3.5 bg-eventeev-orange text-white rounded-2xl font-bold hover:bg-orange-600 transition-colors"
+                >
+                  I Understand & Agree
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Custom Error Modal */}
       <AnimatePresence>

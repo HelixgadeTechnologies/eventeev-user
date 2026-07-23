@@ -4,9 +4,10 @@ import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from '@/i18n/routing';
-import { Home, Users, MessageSquare, Mic2, FileText, Bell, LogOut, Calendar, Gamepad2, BarChart2, Globe } from 'lucide-react';
+import { Home, Users, MessageSquare, Mic2, FileText, Bell, LogOut, Calendar, Gamepad2, BarChart2, Globe, X, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import LanguageSwitcher from '../LanguageSwitcher';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const NAV_ITEMS = [
   { label: "Home", icon: Home, href: "/dashboard" },
@@ -23,6 +24,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -85,7 +87,10 @@ export function Sidebar() {
           <LanguageSwitcher />
         </div>
         
-        <button className="flex items-center gap-3 w-full px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl transition-all">
+        <button 
+          onClick={() => setShowNotifications(true)}
+          className="flex items-center gap-3 w-full px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl transition-all cursor-pointer"
+        >
           <div className="relative">
             <Bell className="w-5 h-5" />
             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-orange-500 rounded-full border-2 border-white" />
@@ -95,7 +100,7 @@ export function Sidebar() {
 
         <button 
           onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl transition-all"
+          className="flex items-center gap-3 w-full px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl transition-all cursor-pointer"
         >
           <LogOut className="w-5 h-5" />
           <span className="font-bold">Log out</span>
@@ -118,6 +123,57 @@ export function Sidebar() {
           </div>
         </div>
       </div>
+
+      {/* Notifications Modal */}
+      <AnimatePresence>
+        {showNotifications && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden p-6 relative text-left"
+            >
+              <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-eventeev-orange" />
+                  <h3 className="text-lg font-bold text-eventeev-navy">Notifications</h3>
+                </div>
+                <button 
+                  onClick={() => setShowNotifications(false)}
+                  className="p-1 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div className="p-3 bg-orange-50 rounded-2xl border border-orange-100 flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-eventeev-orange text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-eventeev-navy">Welcome to Eventeev!</h4>
+                    <p className="text-[11px] text-slate-500 font-medium mt-0.5">Explore sessions, chat with attendees, and participate in live polls.</p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowNotifications(false)}
+                className="w-full mt-6 py-3 bg-slate-100 text-slate-700 font-bold rounded-2xl text-sm hover:bg-slate-200 transition-colors"
+              >
+                Close
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </aside>
   );
 }

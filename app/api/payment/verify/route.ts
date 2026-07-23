@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
     const customFields = data.data.metadata?.custom_fields || [];
     const ticketField = customFields.find((f: any) => f.variable_name === "ticket_id");
     const attendeeField = customFields.find((f: any) => f.variable_name === "attendee_id");
+    const eventField = customFields.find((f: any) => f.variable_name === "event_id");
 
     if (!ticketField || !attendeeField) {
       return NextResponse.json({ error: "Missing metadata in transaction" }, { status: 400 });
@@ -59,9 +60,10 @@ export async function GET(req: NextRequest) {
     }
 
     // Generate JWT token
-    const token = signToken({ id: attendee._id, email: attendee.email });
+    const token = signToken({ id: attendee._id.toString(), email: attendee.email });
+    const eventId = ticket.eventId ? ticket.eventId.toString() : (eventField ? eventField.value.toString() : "");
 
-    return NextResponse.json({ message: "Payment verified successfully", token, eventId: ticket.eventId });
+    return NextResponse.json({ message: "Payment verified successfully", token, eventId });
   } catch (error) {
     console.error("Payment Verification Error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

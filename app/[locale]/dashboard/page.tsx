@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Calendar, MapPin, Bell, Trophy, Zap, ArrowRight, FileText, Download, Link as LinkIcon, Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Calendar, MapPin, Bell, Trophy, Zap, ArrowRight, FileText, Download, Link as LinkIcon, Loader2, X, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
-import { MOCK_EVENT, MOCK_RESOURCES } from "@/lib/data";
+import { MOCK_EVENT } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import { useTranslations } from 'next-intl';
 
@@ -14,6 +14,7 @@ export default function DashboardPage() {
   
   const [eventData, setEventData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
     const fetchEvent = async () => {
@@ -60,13 +61,16 @@ export default function DashboardPage() {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-eventeev-navy/90 via-eventeev-navy/40 to-transparent" />
         
-        <div className="absolute top-12 left-6 right-6 flex justify-between items-center">
+        <div className="absolute top-12 left-6 right-6 flex justify-between items-center z-10">
           <div className="glass px-4 py-2 rounded-full flex items-center gap-2">
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
             <span className="text-xs font-bold text-white tracking-widest uppercase">{c('liveNow')}</span>
           </div>
           <div className="flex items-center gap-3">
-            <button className="w-10 h-10 glass rounded-full flex items-center justify-center text-white">
+            <button 
+              onClick={() => setShowNotifications(true)}
+              className="w-10 h-10 glass rounded-full flex items-center justify-center text-white hover:bg-white/20 transition-colors cursor-pointer"
+            >
               <Bell className="w-5 h-5" />
             </button>
           </div>
@@ -116,9 +120,9 @@ export default function DashboardPage() {
         <div>
           <div className="flex justify-between items-end mb-6">
             <h2 className="text-xl font-black text-eventeev-navy uppercase tracking-tighter">{t('currentSchedule')}</h2>
-            <button className="text-eventeev-orange font-bold text-xs uppercase tracking-widest flex items-center gap-1">
+            <Link href="/dashboard/schedule" className="text-eventeev-orange font-bold text-xs uppercase tracking-widest flex items-center gap-1 hover:underline">
               {t('fullAgenda')} <ArrowRight className="w-3 h-3" />
-            </button>
+            </Link>
           </div>
           
           <div className="space-y-4">
@@ -159,7 +163,7 @@ export default function DashboardPage() {
 
         {/* Daily Trivia Callout */}
         <Link 
-          href="/games/trivia"
+          href="/dashboard/games"
           className="block p-6 bg-gradient-to-br from-eventeev-orange to-orange-600 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden active:scale-[0.98] transition-all"
         >
           <div className="absolute top-0 right-0 p-4 opacity-20">
@@ -182,14 +186,14 @@ export default function DashboardPage() {
             <h2 className="text-xl font-black text-eventeev-navy uppercase tracking-tighter">{t('gamesHub')}</h2>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Link href="/games/trivia" className="p-5 bg-white rounded-3xl premium-shadow border border-slate-100 group">
+            <Link href="/dashboard/games" className="p-5 bg-white rounded-3xl premium-shadow border border-slate-100 group">
               <div className="w-10 h-10 bg-orange-100 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-eventeev-orange group-hover:text-white transition-colors">
                 <Zap className="w-5 h-5 text-eventeev-orange group-hover:text-white" />
               </div>
               <p className="text-sm font-black text-eventeev-navy">{t('dailyTrivia')}</p>
               <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">{t('winPoints')}</p>
             </Link>
-            <Link href="/games/leaderboard" className="p-5 bg-white rounded-3xl premium-shadow border border-slate-100 group">
+            <Link href="/dashboard/games" className="p-5 bg-white rounded-3xl premium-shadow border border-slate-100 group">
               <div className="w-10 h-10 bg-blue-100 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                 <Trophy className="w-5 h-5 text-blue-600 group-hover:text-white" />
               </div>
@@ -203,9 +207,9 @@ export default function DashboardPage() {
         <div className="pb-8">
           <div className="flex justify-between items-end mb-6">
             <h2 className="text-xl font-black text-eventeev-navy uppercase tracking-tighter">{t('eventResources')}</h2>
-            <button className="text-eventeev-orange font-bold text-xs uppercase tracking-widest flex items-center gap-1">
+            <Link href="/dashboard/resources" className="text-eventeev-orange font-bold text-xs uppercase tracking-widest flex items-center gap-1 hover:underline">
               {t('viewAll')} <ArrowRight className="w-3 h-3" />
-            </button>
+            </Link>
           </div>
           
           <div className="space-y-4">
@@ -225,13 +229,27 @@ export default function DashboardPage() {
                        <Download className="w-5 h-5 text-eventeev-orange" />}
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-eventeev-navy">{res.title}</p>
-                      <p className="text-[10px] text-slate-400 font-black uppercase">{res.type} • {res.size || 'N/A'}</p>
+                      <p className="text-sm font-bold text-eventeev-navy">{res.title || res.name}</p>
+                      <p className="text-[10px] text-slate-400 font-black uppercase">{res.type || 'Doc'} • {res.size || 'N/A'}</p>
                     </div>
                   </div>
-                  <button className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 hover:text-eventeev-orange transition-colors">
-                    <Download className="w-4 h-4" />
-                  </button>
+                  {res.url ? (
+                    <a 
+                      href={res.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 hover:text-eventeev-orange hover:bg-orange-50 transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                    </a>
+                  ) : (
+                    <Link 
+                      href="/dashboard/resources"
+                      className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 hover:text-eventeev-orange hover:bg-orange-50 transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                    </Link>
+                  )}
                 </motion.div>
               ))
             ) : (
@@ -242,6 +260,57 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Notifications Drawer/Modal */}
+      <AnimatePresence>
+        {showNotifications && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden p-6 relative"
+            >
+              <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-eventeev-orange" />
+                  <h3 className="text-lg font-bold text-eventeev-navy">Notifications</h3>
+                </div>
+                <button 
+                  onClick={() => setShowNotifications(false)}
+                  className="p-1 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div className="p-3 bg-orange-50 rounded-2xl border border-orange-100 flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-eventeev-orange text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-eventeev-navy">Welcome to Eventeev!</h4>
+                    <p className="text-[11px] text-slate-500 font-medium mt-0.5">Explore sessions, chat with attendees, and participate in live polls.</p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowNotifications(false)}
+                className="w-full mt-6 py-3 bg-slate-100 text-slate-700 font-bold rounded-2xl text-sm hover:bg-slate-200 transition-colors"
+              >
+                Close
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
