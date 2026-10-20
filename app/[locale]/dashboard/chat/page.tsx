@@ -60,7 +60,7 @@ export default function ChatPage() {
         const token = localStorage.getItem("token");
         const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://eventeevapi.onrender.com";
         const res = await fetch(`${API_URL}/api/chat/messages/${activeRoomId}`, {
-          headers: { "x-auth-token": token }
+          headers: token ? { "x-auth-token": token } : {}
         });
         if (res.ok) {
           const result = await res.json();

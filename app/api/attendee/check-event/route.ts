@@ -13,8 +13,6 @@ import { signToken } from "@/lib/jwt";
  */
 export async function GET(req: NextRequest) {
   try {
-    await dbConnect();
-
     const { searchParams } = new URL(req.url);
     const email = searchParams.get("email");
     const eventId = searchParams.get("eventId");
@@ -22,6 +20,12 @@ export async function GET(req: NextRequest) {
     if (!email || !eventId) {
       return NextResponse.json({ error: "email and eventId are required" }, { status: 400 });
     }
+
+    if (!process.env.MONGODB_URI) {
+      return NextResponse.json({ isAttendee: false });
+    }
+
+    await dbConnect();
 
     // Find the attendee by email
     const attendee = await Attendee.findOne({ email: email.toLowerCase().trim() });

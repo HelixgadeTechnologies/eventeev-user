@@ -142,6 +142,7 @@ export default function JoinPage() {
       const ticketTierName = selectedTicket.name || selectedTicket.tier || selectedTicket.title || "General Admission";
       
       if (ticketPrice > 0) {
+        const ticketId = selectedTicket._id || selectedTicket.id;
         // Paid Ticket Flow
         const response = await fetch(`/api/payment/initialize`, {
           method: "POST",
@@ -150,21 +151,23 @@ export default function JoinPage() {
             eventId, 
             name: fullName, 
             email, 
+            ticketId,
             ticketTier: ticketTierName,
             amount: ticketPrice
           }),
         });
         
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         
         if (response.ok && data.authorization_url) {
           window.location.href = data.authorization_url;
         } else {
-          setError(data.error || data.details?.message || "Failed to initialize payment.");
+          setError(data.message || data.error || data.details?.message || "Failed to initialize payment.");
           setLoading(false);
         }
       } else {
         // Free Ticket Flow
+        const ticketId = selectedTicket._id || selectedTicket.id;
         const response = await fetch(`/api/attendee/register`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -172,19 +175,21 @@ export default function JoinPage() {
             email, 
             name: fullName, 
             eventId,
+            ticketId,
             ticketTier: ticketTierName 
           }),
         });
         
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
+        const token = data.token || localStorage.getItem("token");
         
-        if (response.ok && data.token) {
-          localStorage.setItem("token", data.token);
-          localStorage.setItem("eventId", eventId);
+        if (response.ok && (data.token || data.attendee || token)) {
+          if (token) localStorage.setItem("token", token);
+          localStorage.setItem("eventId", data.eventId || eventId);
           router.push("/dashboard");
         } else {
           console.error("Failed to register:", data);
-          setError(data.error || "Failed to register. Please try again.");
+          setError(data.message || data.error || "Failed to register. Please try again.");
           setLoading(false);
         }
       }
