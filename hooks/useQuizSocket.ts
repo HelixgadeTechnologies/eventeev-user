@@ -361,6 +361,7 @@ export function useQuizSocket(): UseQuizSocketReturn {
     newStreak: number;
     rank?: number;
   }) => void>(() => {});
+  const handleQuestionHoldRef = useRef<(data: Record<string, unknown>) => void>(() => {});
 
   // Activate question answering phase: Unlocks the 4 colored geometric answer buttons
   const activateQuestion = useCallback((targetQuestion: QuizQuestion, currentPoints: number, currentStreak: number) => {
@@ -599,7 +600,7 @@ export function useQuizSocket(): UseQuizSocketReturn {
               if (data.status === "finished") {
                 handleGameOver(data);
               } else if (typeof data.currentQuestionIndex === "number" && data.currentQuestionIndex > qIndex) {
-                handleQuestionStart(data);
+                handleQuestionHoldRef.current(data);
               }
             }
           } catch (_) {}
@@ -845,6 +846,130 @@ export function useQuizSocket(): UseQuizSocketReturn {
     );
   }, [completeGame]);
 
+  // Handler for question_display: the admin projector has rendered the question.
+  // This is the ONLY place we call activateQuestion in live mode.
+  const handleQuestionDisplay = useCallback((data: Record<string, unknown>) => {
+    if (!data) return;
+    if (isSandboxRef.current) return; // sandbox uses local timers
+
+    const q = normalizeQuestion(data);
+
+    // Deduplication guard: if we're already active on this question, skip
+    if (
+      currentQuestionRef.current &&
+      currentQuestionRef.current.questionIndex === q.questionIndex &&
+      (gameStateRef.current === 'question_active' || gameStateRef.current === 'answer_locked')
+    ) {
+      return;
+    }
+
+    clearAllTimers();
+    pendingRoundResultRef.current = null;
+    activateQuestion(q, totalScoreRef.current, streakRef.current);
+  }, [clearAllTimers, activateQuestion]);
+
+  // Handler for next_question / start events in LIVE mode:
+  // Put the attendee into holding "game_countdown" (for Q0) or "question_intro" state,
+  // ticking the visual countdown so attendee's screen is in step with admin screen,
+  // but holding until question_display arrives before unlocking answers.
+  const handleQuestionHold = useCallback((data: Record<string, unknown>) => {
+    if (!data) return;
+    if (isSandboxRef.current) {
+      // In sandbox mode, use the full local flow
+      handleQuestionStart(data);
+      return;
+    }
+
+    const q = normalizeQuestion(data);
+
+    // Deduplication guard
+    if (
+      currentQuestionRef.current &&
+      currentQuestionRef.current.questionIndex === q.questionIndex &&
+      (gameStateRef.current === 'game_countdown' ||
+       gameStateRef.current === 'question_intro' ||
+       gameStateRef.current === 'question_active' ||
+       gameStateRef.current === 'answer_locked')
+    ) {
+      return;
+    }
+
+    clearAllTimers();
+    pendingRoundResultRef.current = null;
+    currentQuestionRef.current = q;
+    selectedOptionIndexRef.current = null;
+
+    const isFirst = q.questionIndex === 0 &&
+      (gameStateRef.current === 'lobby' || gameStateRef.current === 'idle' || gameStateRef.current === 'joining');
+
+    setCurrentQuestion(q);
+    setSelectedOptionIndex(null);
+    setRoundResult(null);
+
+    if (isFirst) {
+      gameStateRef.current = 'game_countdown';
+      setGameState('game_countdown');
+      setCountdownTimeLeft(5);
+
+      let count = 5;
+      const countInterval = setInterval(() => {
+        count -= 1;
+        setCountdownTimeLeft(Math.max(0, count));
+
+        if (count <= 0) {
+          clearInterval(countInterval);
+          if (gameStateRef.current === 'game_countdown') {
+            gameStateRef.current = 'question_intro';
+            setGameState('question_intro');
+            setIntroTimeLeft(3);
+
+            let intro = 3;
+            const introInterval = setInterval(() => {
+              intro -= 1;
+              setIntroTimeLeft(Math.max(0, intro));
+              if (intro <= 0) {
+                clearInterval(introInterval);
+              }
+            }, 1000);
+            addTimeout(introInterval);
+          }
+        }
+      }, 1000);
+      addTimeout(countInterval);
+    } else {
+      gameStateRef.current = 'question_intro';
+      setGameState('question_intro');
+      setIntroTimeLeft(3);
+
+      let intro = 3;
+      const introInterval = setInterval(() => {
+        intro -= 1;
+        setIntroTimeLeft(Math.max(0, intro));
+        if (intro <= 0) {
+          clearInterval(introInterval);
+        }
+      }, 1000);
+      addTimeout(introInterval);
+    }
+
+    // Safety fallback: if question_display never arrives within expected window + 4s, activate anyway
+    const safetyMs = (isFirst ? 12 : 7) * 1000;
+    const safetyTimer = setTimeout(() => {
+      if (
+        gameStateRef.current === 'game_countdown' ||
+        gameStateRef.current === 'question_intro'
+      ) {
+        activateQuestion(q, totalScoreRef.current, streakRef.current);
+      }
+    }, safetyMs);
+    addTimeout(safetyTimer);
+  }, [clearAllTimers, activateQuestion, handleQuestionStart, addTimeout]);
+
+  // Keep handleQuestionHoldRef up to date
+  useEffect(() => {
+    handleQuestionHoldRef.current = handleQuestionHold;
+  }, [handleQuestionHold]);
+
   // Stable Real-Time Socket Connection & Event Listeners
   useEffect(() => {
     if (isSandbox || !sessionData) return;
@@ -891,7 +1016,7 @@ export function useQuizSocket(): UseQuizSocketReturn {
       if (!data) return;
       const status = data.status || data.gameState || data.state;
       if (status === "active" || status === "in_progress" || status === "countdown" || status === "started") {
-        handleQuestionStart(data);
+        handleQuestionHold(data);
       } else if (status === "reveal" || status === "revealed" || status === "round_reveal") {
         handleQuestionEnded(data);
       } else if (status === "finished" || status === "ended" || status === "game_over") {
@@ -901,14 +1026,15 @@ export function useQuizSocket(): UseQuizSocketReturn {
 
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
-    socket.on("game_started", handleQuestionStart);
-    socket.on("quiz_started", handleQuestionStart);
-    socket.on("start_quiz", handleQuestionStart);
-    socket.on("admin_start", handleQuestionStart);
-    socket.on("question_start", handleQuestionStart);
-    socket.on("question_started", handleQuestionStart);
-    socket.on("new_question", handleQuestionStart);
-    socket.on("next_question", handleQuestionStart);
+    socket.on("question_display", handleQuestionDisplay);
+    socket.on("game_started", handleQuestionHold);
+    socket.on("quiz_started", handleQuestionHold);
+    socket.on("start_quiz", handleQuestionHold);
+    socket.on("admin_start", handleQuestionHold);
+    socket.on("question_start", handleQuestionHold);
+    socket.on("question_started", handleQuestionHold);
+    socket.on("new_question", handleQuestionHold);
+    socket.on("next_question", handleQuestionHold);
     socket.on("game_state_changed", handleGameStateChange);
     socket.on("state_change", handleGameStateChange);
     socket.on("session_updated", handleGameStateChange);
@@ -928,14 +1054,15 @@ export function useQuizSocket(): UseQuizSocketReturn {
     return () => {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
-      socket.off("game_started", handleQuestionStart);
-      socket.off("quiz_started", handleQuestionStart);
-      socket.off("start_quiz", handleQuestionStart);
-      socket.off("admin_start", handleQuestionStart);
-      socket.off("question_start", handleQuestionStart);
-      socket.off("question_started", handleQuestionStart);
-      socket.off("new_question", handleQuestionStart);
-      socket.off("next_question", handleQuestionStart);
+      socket.off("question_display", handleQuestionDisplay);
+      socket.off("game_started", handleQuestionHold);
+      socket.off("quiz_started", handleQuestionHold);
+      socket.off("start_quiz", handleQuestionHold);
+      socket.off("admin_start", handleQuestionHold);
+      socket.off("question_start", handleQuestionHold);
+      socket.off("question_started", handleQuestionHold);
+      socket.off("new_question", handleQuestionHold);
+      socket.off("next_question", handleQuestionHold);
       socket.off("game_state_changed", handleGameStateChange);
       socket.off("state_change", handleGameStateChange);
       socket.off("session_updated", handleGameStateChange);
@@ -952,7 +1079,7 @@ export function useQuizSocket(): UseQuizSocketReturn {
       socket.off("quiz_ended", handleGameOver);
       socket.off("game_ended", handleGameOver);
     };
-  }, [isSandbox, sessionData, pin, nickname, handleQuestionStart, handleQuestionEnded, handleGameOver]);
+  }, [isSandbox, sessionData, pin, nickname, handleQuestionStart, handleQuestionEnded, handleGameOver, handleQuestionHold, handleQuestionDisplay]);
 
   // Lobby Polling Guard: Detect when admin starts game
   useEffect(() => {
@@ -981,7 +1108,7 @@ export function useQuizSocket(): UseQuizSocketReturn {
           Boolean(data.currentQuestion);
 
         if (isLive) {
-          handleQuestionStart(data);
+          handleQuestionHold(data);
         }
       } catch {
         // Silently continue
@@ -993,7 +1120,7 @@ export function useQuizSocket(): UseQuizSocketReturn {
       isSubscribed = false;
       clearInterval(pollTimer);
     };
-  }, [gameState, sessionData, pin, isSandbox, handleQuestionStart]);
+  }, [gameState, sessionData, pin, isSandbox, handleQuestionHold]);
 
   // Join Game via REST API + Socket.IO
   const joinGame = useCallback(async (gamePin: string, playerNickname: string): Promise<boolean> => {
@@ -1041,7 +1168,12 @@ export function useQuizSocket(): UseQuizSocketReturn {
           Boolean(session.currentQuestion);
 
         if (isAlreadyLive) {
-          handleQuestionStart(session);
+          const q = normalizeQuestion(session);
+          if (q.questionIndex > 0) {
+            activateQuestion(q, 0, 0);
+          } else {
+            handleQuestionHold(session);
+          }
         } else {
           setGameState("lobby");
         }
@@ -1057,7 +1189,7 @@ export function useQuizSocket(): UseQuizSocketReturn {
       setGameState("idle");
       return false;
     }
-  }, [handleQuestionStart]);
+  }, [handleQuestionHold, activateQuestion]);
 
   // Leave Game
   const leaveGame = useCallback(() => {
