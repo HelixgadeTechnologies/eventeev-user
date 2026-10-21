@@ -73,9 +73,29 @@ export function KahootOptionGrid({
 }: KahootOptionGridProps) {
   // Support 2 to 4 options
   const displayOptions = options.length > 0 ? options : ["Option 1", "Option 2", "Option 3", "Option 4"];
+  const isTwoOptions = displayOptions.length === 2;
+
+  const handleSelect = (idx: number) => {
+    if (disabled || selectedOptionIndex !== null) return;
+    if (typeof window !== "undefined" && "navigator" in window && "vibrate" in navigator) {
+      try {
+        navigator.vibrate(35);
+      } catch {
+        // Silently ignore
+      }
+    }
+    onSelectOption(idx);
+  };
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-5 w-full flex-1 min-h-[300px] md:min-h-[420px]">
+    <div
+      className={cn(
+        "w-full flex-1 gap-3 md:gap-5 min-h-[300px] md:min-h-[420px]",
+        isTwoOptions
+          ? "grid grid-cols-1 sm:grid-cols-2"
+          : "grid grid-cols-1 sm:grid-cols-2"
+      )}
+    >
       {displayOptions.slice(0, 4).map((optionText, idx) => {
         const theme = KAHOOT_THEME[idx] || KAHOOT_THEME[0];
         const isSelected = selectedOptionIndex === idx;
@@ -87,11 +107,11 @@ export function KahootOptionGrid({
             type="button"
             disabled={disabled || selectedOptionIndex !== null}
             whileHover={!disabled && selectedOptionIndex === null ? { scale: 1.015, y: -2 } : {}}
-            whileTap={!disabled && selectedOptionIndex === null ? { scale: 0.96 } : {}}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            onClick={() => onSelectOption(idx)}
+            whileTap={!disabled && selectedOptionIndex === null ? { scale: 0.96, y: 1 } : {}}
+            transition={{ type: "spring", stiffness: 450, damping: 25 }}
+            onClick={() => handleSelect(idx)}
             className={cn(
-              "relative group flex flex-col justify-between p-5 md:p-7 rounded-2xl md:rounded-3xl text-left transition-all duration-200 select-none shadow-lg cursor-pointer overflow-hidden border-b-4",
+              "relative group flex flex-col justify-between p-5 md:p-7 rounded-2xl md:rounded-3xl text-left transition-all duration-200 select-none shadow-lg cursor-pointer overflow-hidden border-b-6 active:border-b-2",
               theme.bgClass,
               theme.borderClass,
               theme.shadowClass,
@@ -101,18 +121,18 @@ export function KahootOptionGrid({
             )}
           >
             {/* Top row: Shape Symbol & Letter Badge */}
-            <div className="flex items-center justify-between w-full mb-3">
-              <div className="p-1 rounded-xl bg-black/15 backdrop-blur-sm flex items-center justify-center">
+            <div className="flex items-center justify-between w-full mb-2 md:mb-3">
+              <div className="p-1.5 rounded-xl bg-black/20 backdrop-blur-sm flex items-center justify-center shadow-inner">
                 {theme.shape}
               </div>
-              <span className="text-white/80 font-black text-sm md:text-base tracking-widest bg-black/20 px-3 py-1 rounded-full uppercase">
+              <span className="text-white font-black text-sm md:text-base tracking-widest bg-black/25 px-3 py-1 rounded-full uppercase border border-white/10">
                 {theme.label}
               </span>
             </div>
 
             {/* Bottom/Center: Option text */}
-            <div className="flex-1 flex items-center">
-              <p className="text-white font-extrabold text-base md:text-xl lg:text-2xl leading-snug break-words drop-shadow-sm">
+            <div className="flex-1 flex items-center py-2">
+              <p className="text-white font-extrabold text-base md:text-xl lg:text-2xl leading-snug break-words drop-shadow-md">
                 {optionText}
               </p>
             </div>

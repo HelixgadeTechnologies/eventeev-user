@@ -55,6 +55,7 @@ export interface UseQuizSocketReturn {
   timeLeft: number;
   error: string;
   isSandbox: boolean;
+  isConnected: boolean;
   joinGame: (pin: string, nickname: string) => Promise<boolean>;
   submitAnswer: (optionIndex: number) => void;
   leaveGame: () => void;
@@ -103,6 +104,69 @@ const DEMO_QUESTIONS: QuizQuestion[] = [
 
 const DEMO_CORRECT_ANSWERS = [0, 1, 2];
 
+// Normalize question data from any backend schema variations
+export function normalizeQuestion(data: any): QuizQuestion {
+  const rawQ = data?.currentQuestion || data?.question || data;
+  const questionText =
+    typeof rawQ === "string"
+      ? rawQ
+      : (rawQ?.question || rawQ?.title || rawQ?.text || data?.title || data?.question || "Question");
+
+  let rawOptions = data?.options || rawQ?.options || [];
+  if (!Array.isArray(rawOptions) || rawOptions.length === 0) {
+    rawOptions = ["Option A", "Option B", "Option C", "Option D"];
+  }
+
+  const options: string[] = rawOptions.map((opt: any) => {
+    if (typeof opt === "string") return opt;
+    if (typeof opt === "object" && opt !== null) {
+      return opt.text || opt.title || opt.option || opt.label || String(opt);
+    }
+    return String(opt);
+  });
+
+  const timeLimitSeconds =
+    data?.timeLimitSeconds ||
+    data?.duration ||
+    data?.timeLimit ||
+    rawQ?.timeLimitSeconds ||
+    rawQ?.timeLimit ||
+    rawQ?.duration ||
+    15;
+
+  const questionIndex =
+    data?.questionIndex ??
+    data?.currentQuestionIndex ??
+    rawQ?.questionIndex ??
+    0;
+
+  const totalQuestions =
+    data?.totalQuestions ??
+    data?.questionsCount ??
+    rawQ?.totalQuestions ??
+    5;
+
+  return {
+    questionIndex,
+    totalQuestions,
+    question: questionText,
+    options,
+    timeLimitSeconds,
+    imageUrl: data?.imageUrl || rawQ?.imageUrl
+  };
+}
+
+// Trigger gentle mobile haptic feedback if available
+function triggerHaptic(pattern: number | number[] = 30) {
+  if (typeof window !== "undefined" && "navigator" in window && "vibrate" in navigator) {
+    try {
+      navigator.vibrate(pattern);
+    } catch {
+      // Ignore vibration errors
+    }
+  }
+}
+
 export function useQuizSocket(): UseQuizSocketReturn {
   const [gameState, setGameState] = useState<GameState>("idle");
   const [pin, setPin] = useState("");
@@ -117,12 +181,34 @@ export function useQuizSocket(): UseQuizSocketReturn {
   const [timeLeft, setTimeLeft] = useState(0);
   const [error, setError] = useState("");
   const [isSandbox, setIsSandbox] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const sandboxStepRef = useRef<number>(0);
   const sandboxTimeouts = useRef<NodeJS.Timeout[]>([]);
 
-  // Clear timers on unmount
+  // Synchronized refs to avoid listener tearing in effects
+  const gameStateRef = useRef(gameState);
+  const timeLeftRef = useRef(timeLeft);
+  const totalScoreRef = useRef(totalScore);
+  const streakRef = useRef(streak);
+  const selectedOptionIndexRef = useRef(selectedOptionIndex);
+  const currentQuestionRef = useRef(currentQuestion);
+  const pinRef = useRef(pin);
+  const nicknameRef = useRef(nickname);
+  const sessionDataRef = useRef(sessionData);
+
+  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
+  useEffect(() => { timeLeftRef.current = timeLeft; }, [timeLeft]);
+  useEffect(() => { totalScoreRef.current = totalScore; }, [totalScore]);
+  useEffect(() => { streakRef.current = streak; }, [streak]);
+  useEffect(() => { selectedOptionIndexRef.current = selectedOptionIndex; }, [selectedOptionIndex]);
+  useEffect(() => { currentQuestionRef.current = currentQuestion; }, [currentQuestion]);
+  useEffect(() => { pinRef.current = pin; }, [pin]);
+  useEffect(() => { nicknameRef.current = nickname; }, [nickname]);
+  useEffect(() => { sessionDataRef.current = sessionData; }, [sessionData]);
+
+  // Clean up timers on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -149,108 +235,254 @@ export function useQuizSocket(): UseQuizSocketReturn {
     }
   }, [gameState, timeLeft]);
 
-  // Real-time socket event listeners
+  // Handler for question start / game start
+  const handleQuestionStart = useCallback((data: any) => {
+    if (!data) return;
+
+    const q = normalizeQuestion(data);
+    setCurrentQuestion(q);
+    setTimeLeft(q.timeLimitSeconds);
+    setSelectedOptionIndex(null);
+    setRoundResult(null);
+    setGameState("question_active");
+
+    triggerHaptic([60, 40, 60]);
+  }, []);
+
+  // Handler for round reveal / question ended
+  const handleQuestionEnded = useCallback((data: any) => {
+    const currentOption = selectedOptionIndexRef.current;
+    const currentTotal = totalScoreRef.current;
+    const currentStreakCount = streakRef.current;
+    const currentRemaining = timeLeftRef.current;
+    const activeQ = currentQuestionRef.current;
+
+    const correctOptionIndex = data?.correctOptionIndex ?? data?.correctAnswer ?? 0;
+    const isCorrect =
+      typeof data?.isCorrect === "boolean"
+        ? data.isCorrect
+        : currentOption !== null && currentOption === correctOptionIndex;
+
+    const points =
+      data?.pointsAdded ??
+      (isCorrect ? Math.max(100, Math.round(currentRemaining * 50) + 500) : 0);
+
+    const newScore = currentTotal + points;
+    const newStreak = isCorrect ? currentStreakCount + 1 : 0;
+
+    setTotalScore(newScore);
+    setStreak(newStreak);
+
+    setRoundResult({
+      questionIndex: data?.questionIndex ?? activeQ?.questionIndex ?? 0,
+      correctOptionIndex,
+      selectedOptionIndex: currentOption,
+      isCorrect,
+      pointsAdded: points,
+      totalScore: newScore,
+      streak: newStreak,
+      rank: data?.rank
+    });
+
+    setGameState("round_reveal");
+
+    if (isCorrect) {
+      triggerHaptic([70, 50, 70]);
+    } else {
+      triggerHaptic(120);
+    }
+  }, []);
+
+  // Handler for game over
+  const handleGameOver = useCallback((data: any) => {
+    const currentTotal = totalScoreRef.current;
+    const playerNick = nicknameRef.current || "Player";
+    const currentSessionId =
+      sessionDataRef.current?._id || sessionDataRef.current?.sessionId;
+
+    setGameOverData({
+      sessionId: currentSessionId,
+      finalScore: data?.finalScore ?? currentTotal,
+      finalRank: data?.finalRank ?? 1,
+      totalParticipants: data?.totalParticipants ?? 24,
+      topLeaderboard: data?.topLeaderboard || [
+        { name: playerNick, score: currentTotal, rank: 1 },
+        { name: "Sarah Chen", score: Math.max(0, currentTotal - 150), rank: 2 },
+        { name: "Marcus Thorne", score: Math.max(0, currentTotal - 300), rank: 3 }
+      ]
+    });
+    setGameState("game_over");
+    triggerHaptic([100, 80, 100, 80, 150]);
+  }, []);
+
+  // Stable Real-Time Socket Connection & Event Listeners
   useEffect(() => {
     if (isSandbox || !sessionData) return;
 
     const socket = getSocket();
     if (!socket) return;
 
+    setIsConnected(socket.connected);
+
+    const onConnect = () => {
+      setIsConnected(true);
+      const currentPin = pinRef.current;
+      const sId = sessionDataRef.current?._id || sessionDataRef.current?.sessionId;
+      const nick = nicknameRef.current;
+
+      if (currentPin) {
+        socket.emit("join_quiz_session", {
+          pin: currentPin,
+          sessionId: sId,
+          nickname: nick
+        });
+      }
+    };
+
+    const onDisconnect = () => {
+      setIsConnected(false);
+    };
+
+    // Join room on mount
     const currentPin = pin;
     const currentSessionId = sessionData?._id || sessionData?.sessionId || sessionData?.id;
-
-    // Join room on socket
     socket.emit("join_quiz_session", {
       pin: currentPin,
       sessionId: currentSessionId,
       nickname
     });
 
-    // Listen for game started / question start
-    const handleQuestionStart = (data: any) => {
-      const q: QuizQuestion = {
-        questionIndex: data.questionIndex ?? 0,
-        totalQuestions: data.totalQuestions ?? 5,
-        question: data.question || data.title || "Question",
-        options: data.options || [],
-        timeLimitSeconds: data.timeLimitSeconds || data.duration || 15,
-        imageUrl: data.imageUrl
-      };
+    // Generic game state change handler from admin
+    const handleGameStateChange = (data: any) => {
+      if (!data) return;
 
-      setCurrentQuestion(q);
-      setTimeLeft(q.timeLimitSeconds);
-      setSelectedOptionIndex(null);
-      setRoundResult(null);
-      setGameState("question_active");
+      const status = data.status || data.gameState || data.state;
+      if (status === "in_progress" || status === "active" || status === "started" || data.currentQuestion) {
+        handleQuestionStart(data);
+      } else if (status === "reveal" || status === "round_ended" || status === "question_ended") {
+        handleQuestionEnded(data);
+      } else if (status === "completed" || status === "ended" || status === "game_over") {
+        handleGameOver(data);
+      }
     };
 
-    // Listen for round end / reveal
-    const handleQuestionEnded = (data: any) => {
-      const isCorrect = data.isCorrect ?? (data.correctOptionIndex === selectedOptionIndex);
-      const points = data.pointsAdded ?? (isCorrect ? Math.max(100, Math.round(timeLeft * 50)) : 0);
-      const newScore = totalScore + points;
-      const newStreak = isCorrect ? streak + 1 : 0;
-
-      setTotalScore(newScore);
-      setStreak(newStreak);
-
-      setRoundResult({
-        questionIndex: data.questionIndex ?? (currentQuestion?.questionIndex ?? 0),
-        correctOptionIndex: data.correctOptionIndex ?? 0,
-        selectedOptionIndex,
-        isCorrect,
-        pointsAdded: points,
-        totalScore: newScore,
-        streak: newStreak,
-        rank: data.rank
-      });
-
-      setGameState("round_reveal");
-    };
-
-    // Listen for game over
-    const handleGameOver = (data: any) => {
-      setGameOverData({
-        sessionId: currentSessionId,
-        finalScore: data.finalScore ?? totalScore,
-        finalRank: data.finalRank ?? 1,
-        totalParticipants: data.totalParticipants ?? 24,
-        topLeaderboard: data.topLeaderboard || [
-          { name: nickname, score: totalScore, rank: 1 },
-          { name: "Sarah Chen", score: Math.max(0, totalScore - 150), rank: 2 },
-          { name: "Marcus Thorne", score: Math.max(0, totalScore - 300), rank: 3 }
-        ]
-      });
-      setGameState("game_over");
-    };
-
+    // Register all admin/host start variations
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
     socket.on("game_started", handleQuestionStart);
+    socket.on("quiz_started", handleQuestionStart);
+    socket.on("start_quiz", handleQuestionStart);
+    socket.on("admin_start", handleQuestionStart);
     socket.on("question_start", handleQuestionStart);
+    socket.on("question_started", handleQuestionStart);
     socket.on("new_question", handleQuestionStart);
+    socket.on("next_question", handleQuestionStart);
+    socket.on("game_state_changed", handleGameStateChange);
+    socket.on("state_change", handleGameStateChange);
+    socket.on("session_updated", handleGameStateChange);
+    socket.on("game_status", handleGameStateChange);
     socket.on("question_ended", handleQuestionEnded);
     socket.on("round_ended", handleQuestionEnded);
+    socket.on("round_result", handleQuestionEnded);
     socket.on("game_over", handleGameOver);
     socket.on("quiz_ended", handleGameOver);
 
     return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
       socket.off("game_started", handleQuestionStart);
+      socket.off("quiz_started", handleQuestionStart);
+      socket.off("start_quiz", handleQuestionStart);
+      socket.off("admin_start", handleQuestionStart);
       socket.off("question_start", handleQuestionStart);
+      socket.off("question_started", handleQuestionStart);
       socket.off("new_question", handleQuestionStart);
+      socket.off("next_question", handleQuestionStart);
+      socket.off("game_state_changed", handleGameStateChange);
+      socket.off("state_change", handleGameStateChange);
+      socket.off("session_updated", handleGameStateChange);
+      socket.off("game_status", handleGameStateChange);
       socket.off("question_ended", handleQuestionEnded);
       socket.off("round_ended", handleQuestionEnded);
+      socket.off("round_result", handleQuestionEnded);
       socket.off("game_over", handleGameOver);
       socket.off("quiz_ended", handleGameOver);
     };
-  }, [isSandbox, sessionData, pin, nickname, selectedOptionIndex, totalScore, streak, currentQuestion, timeLeft]);
+  }, [isSandbox, sessionData, pin, nickname, handleQuestionStart, handleQuestionEnded, handleGameOver]);
+
+  // Active Lobby State Polling Guard:
+  // When connected and in the lobby, actively check if the admin has started the game
+  // in case the WebSocket broadcast was missed or sent before the attendee joined.
+  useEffect(() => {
+    if (gameState !== "lobby" || !sessionData || isSandbox) return;
+
+    const currentPin = pin || sessionData?.pin;
+    const sessionId = sessionData?._id || sessionData?.sessionId || sessionData?.id;
+    const currentNick = nickname;
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://eventeevapi.onrender.com";
+
+    let isSubscribed = true;
+
+    const verifyLobbyState = async () => {
+      try {
+        // Try dedicated status endpoint first
+        let res = await fetch(`${API_URL}/api/game/quiz/session/${sessionId}/status`, {
+          headers: { "Cache-Control": "no-cache" }
+        }).catch(() => null);
+
+        let data: any = null;
+        if (res && res.ok) {
+          data = await res.json().catch(() => null);
+        } else {
+          // Fallback to join API which returns session status and current question
+          res = await fetch(`${API_URL}/api/game/quiz/session/join`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
+            body: JSON.stringify({ pin: currentPin, nickname: currentNick })
+          }).catch(() => null);
+
+          if (res && res.ok) {
+            data = await res.json().catch(() => null);
+          }
+        }
+
+        if (!isSubscribed || !data) return;
+
+        // Check if admin has started
+        const isLive =
+          data.status === "in_progress" ||
+          data.status === "active" ||
+          data.status === "started" ||
+          Boolean(data.currentQuestion);
+
+        if (isLive) {
+          handleQuestionStart(data);
+        }
+      } catch (err) {
+        // Silently continue to next poll cycle
+      }
+    };
+
+    // Poll every 2.5 seconds while waiting in lobby
+    const pollTimer = setInterval(verifyLobbyState, 2500);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(pollTimer);
+    };
+  }, [gameState, sessionData, pin, nickname, isSandbox, handleQuestionStart]);
 
   // Join Game via API + Socket
   const joinGame = useCallback(async (gamePin: string, playerNickname: string): Promise<boolean> => {
     if (!gamePin || !playerNickname) return false;
 
+    const normalizedPin = gamePin.trim().toUpperCase();
+    const cleanNick = playerNickname.trim();
+
     setGameState("joining");
     setError("");
-    setPin(gamePin.toUpperCase());
-    setNickname(playerNickname);
+    setPin(normalizedPin);
+    setNickname(cleanNick);
     setIsSandbox(false);
 
     try {
@@ -258,7 +490,7 @@ export function useQuizSocket(): UseQuizSocketReturn {
       const res = await fetch(`${API_URL}/api/game/quiz/session/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: gamePin.toUpperCase(), nickname: playerNickname })
+        body: JSON.stringify({ pin: normalizedPin, nickname: cleanNick })
       });
 
       const data = await res.json().catch(() => ({}));
@@ -267,29 +499,25 @@ export function useQuizSocket(): UseQuizSocketReturn {
         setSessionData(data);
         const socket = initSocket();
         socket.emit("join_quiz_session", {
-          pin: gamePin.toUpperCase(),
+          pin: normalizedPin,
           sessionId: data._id || data.sessionId,
-          nickname: playerNickname
+          nickname: cleanNick
         });
 
-        // Check if game was ALREADY started
-        if (data.status === "in_progress" || data.status === "active" || data.currentQuestion) {
-          const q: QuizQuestion = {
-            questionIndex: data.currentQuestionIndex || 0,
-            totalQuestions: data.totalQuestions || 5,
-            question: data.currentQuestion?.question || "Question in progress",
-            options: data.currentQuestion?.options || ["A", "B", "C", "D"],
-            timeLimitSeconds: data.currentQuestion?.timeLimit || 15
-          };
-          setCurrentQuestion(q);
-          setTimeLeft(q.timeLimitSeconds);
-          setGameState("question_active");
+        // Always check if the game is ALREADY in progress or started by the admin
+        const isAlreadyLive =
+          data.status === "in_progress" ||
+          data.status === "active" ||
+          data.status === "started" ||
+          Boolean(data.currentQuestion);
+
+        if (isAlreadyLive) {
+          handleQuestionStart(data);
         } else {
           setGameState("lobby");
         }
         return true;
       } else {
-        // If live session not found, we inform the user but also provide sandbox option
         setError(data.message || "Game session not found or has already ended.");
         setGameState("idle");
         return false;
@@ -300,33 +528,39 @@ export function useQuizSocket(): UseQuizSocketReturn {
       setGameState("idle");
       return false;
     }
-  }, []);
+  }, [handleQuestionStart]);
 
   // Submit Answer
   const submitAnswer = useCallback((optionIndex: number) => {
-    if (gameState !== "question_active" || selectedOptionIndex !== null) return;
+    if (gameStateRef.current !== "question_active" || selectedOptionIndexRef.current !== null) return;
 
+    triggerHaptic(35);
     setSelectedOptionIndex(optionIndex);
     setGameState("answer_locked");
 
     if (isSandbox) {
-      // Sandbox mode will trigger round reveal automatically in timeout
       return;
     }
 
     // Emit answer via socket
     const socket = getSocket();
-    if (socket && sessionData) {
+    const currentPin = pinRef.current;
+    const currentSession = sessionDataRef.current;
+    const activeQ = currentQuestionRef.current;
+    const remaining = timeLeftRef.current;
+    const playerNick = nicknameRef.current;
+
+    if (socket && currentSession) {
       socket.emit("submit_quiz_answer", {
-        pin,
-        sessionId: sessionData?._id || sessionData?.sessionId,
-        questionIndex: currentQuestion?.questionIndex ?? 0,
+        pin: currentPin,
+        sessionId: currentSession._id || currentSession.sessionId,
+        questionIndex: activeQ?.questionIndex ?? 0,
         selectedOptionIndex: optionIndex,
-        timeElapsedSeconds: (currentQuestion?.timeLimitSeconds ?? 15) - timeLeft,
-        nickname
+        timeElapsedSeconds: (activeQ?.timeLimitSeconds ?? 15) - remaining,
+        nickname: playerNick
       });
     }
-  }, [gameState, selectedOptionIndex, isSandbox, pin, sessionData, currentQuestion, timeLeft, nickname]);
+  }, [isSandbox]);
 
   // Leave Game
   const leaveGame = useCallback(() => {
@@ -334,8 +568,8 @@ export function useQuizSocket(): UseQuizSocketReturn {
     sandboxTimeouts.current.forEach(clearTimeout);
 
     const socket = getSocket();
-    if (socket && pin) {
-      socket.emit("leave_quiz_session", { pin, nickname });
+    if (socket && pinRef.current) {
+      socket.emit("leave_quiz_session", { pin: pinRef.current, nickname: nicknameRef.current });
     }
 
     setGameState("idle");
@@ -351,13 +585,14 @@ export function useQuizSocket(): UseQuizSocketReturn {
     setTimeLeft(0);
     setError("");
     setIsSandbox(false);
-  }, [pin, nickname]);
+  }, []);
 
   // Sandbox demo flow for instant local testing of all Kahoot phases
   const startSandboxDemo = useCallback(() => {
     setIsSandbox(true);
     setPin("DEMO88");
-    setNickname(nickname || "ChampionPlayer");
+    const demoNick = nickname || "AttendeePlayer";
+    setNickname(demoNick);
     setSessionData({ _id: "demo_session_123", pin: "DEMO88", status: "waiting" });
     setGameState("lobby");
     setTotalScore(0);
@@ -367,7 +602,7 @@ export function useQuizSocket(): UseQuizSocketReturn {
     sandboxTimeouts.current.forEach(clearTimeout);
     sandboxTimeouts.current = [];
 
-    // Simulate 3 seconds in lobby then start Q1
+    // Simulate 3 seconds in lobby then admin starts Q1
     const t1 = setTimeout(() => {
       runSandboxQuestion(0, 0, 0);
     }, 3000);
@@ -383,7 +618,7 @@ export function useQuizSocket(): UseQuizSocketReturn {
         finalRank: 1,
         totalParticipants: 42,
         topLeaderboard: [
-          { name: nickname || "ChampionPlayer", score: currentPoints, rank: 1 },
+          { name: nickname || "AttendeePlayer", score: currentPoints, rank: 1 },
           { name: "Elena Kovic", score: Math.max(1200, currentPoints - 100), rank: 2 },
           { name: "Marcus Thorne", score: Math.max(900, currentPoints - 350), rank: 3 }
         ]
@@ -452,6 +687,7 @@ export function useQuizSocket(): UseQuizSocketReturn {
     timeLeft,
     error,
     isSandbox,
+    isConnected,
     joinGame,
     submitAnswer,
     leaveGame,

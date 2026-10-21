@@ -29,11 +29,21 @@ export default function GamesPage() {
     timeLeft,
     error,
     isSandbox,
+    isConnected,
     joinGame,
     submitAnswer,
     leaveGame,
     startSandboxDemo
   } = useQuizSocket();
+
+  // Auto-scroll to top whenever a new question is activated on mobile
+  useEffect(() => {
+    if (gameState === "question_active") {
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
+  }, [gameState, currentQuestion?.questionIndex]);
 
   // Prefill nickname from attendee profile if available
   useEffect(() => {
@@ -70,11 +80,11 @@ export default function GamesPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto h-full min-h-[calc(100vh-80px)] flex flex-col">
+    <div className="p-3 sm:p-4 md:p-8 pb-24 lg:pb-8 max-w-4xl mx-auto h-full min-h-[calc(100vh-80px)] flex flex-col justify-between">
       {/* Header (only shown during idle state) */}
       {gameState === "idle" && (
-        <div className="flex items-center gap-3 mb-6 md:mb-8">
-          <div className="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center shadow-sm">
+        <div className="flex items-center gap-3 mb-5 md:mb-8 pt-2">
+          <div className="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center shadow-xs">
             <Gamepad2 className="w-6 h-6 text-eventeev-orange" />
           </div>
           <div>
@@ -98,8 +108,8 @@ export default function GamesPage() {
               exit={{ opacity: 0, scale: 0.96 }}
               className="flex-1 flex items-center justify-center py-4"
             >
-              <div className="bg-white p-6 md:p-10 rounded-3xl premium-shadow border border-slate-100 max-w-md w-full relative overflow-hidden">
-                <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-sm">
+              <div className="bg-white p-6 sm:p-8 md:p-10 rounded-3xl premium-shadow border border-slate-100 max-w-md w-full relative overflow-hidden">
+                <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-xs">
                   <Zap className="w-8 h-8 text-eventeev-orange" />
                 </div>
                 <h2 className="text-2xl font-black text-eventeev-navy text-center mb-1">
@@ -166,7 +176,7 @@ export default function GamesPage() {
                   <button
                     type="button"
                     onClick={startSandboxDemo}
-                    className="inline-flex items-center gap-2 bg-orange-50 hover:bg-orange-100 text-eventeev-orange border border-orange-200/80 px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all"
+                    className="inline-flex items-center gap-2 bg-orange-50 hover:bg-orange-100 text-eventeev-orange border border-orange-200/80 px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer"
                   >
                     <Sparkles className="w-4 h-4" />
                     Try Kahoot Demo (3 Questions)
