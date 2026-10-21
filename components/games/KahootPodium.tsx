@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Trophy, Medal, ArrowRight, RotateCcw } from "lucide-react";
+import { Trophy, ArrowRight, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface KahootPodiumProps {

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Timer, Flame, Trophy, X, Zap } from "lucide-react";
+import { Flame, Trophy, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface KahootQuestionHeaderProps {

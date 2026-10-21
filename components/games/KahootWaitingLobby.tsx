@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Loader2, Zap, User, ArrowLeft, PlayCircle, Radio, Sparkles } from "lucide-react";
+import { Loader2, Zap, User, ArrowLeft, PlayCircle } from "lucide-react";
 
 interface KahootWaitingLobbyProps {
   pin: string;

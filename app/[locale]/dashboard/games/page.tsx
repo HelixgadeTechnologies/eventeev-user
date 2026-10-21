@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Gamepad2, Zap, PlayCircle, Sparkles } from "lucide-react";
+import { Loader2, Gamepad2, Zap, Sparkles } from "lucide-react";
 import { useQuizSocket } from "@/hooks/useQuizSocket";
 import { KahootOptionGrid } from "@/components/games/KahootOptionGrid";
 import { KahootQuestionHeader } from "@/components/games/KahootQuestionHeader";
@@ -29,7 +29,6 @@ export default function GamesPage() {
     timeLeft,
     error,
     isSandbox,
-    isConnected,
     joinGame,
     submitAnswer,
     leaveGame,
@@ -59,11 +58,11 @@ export default function GamesPage() {
         if (res.ok) {
           const data = await res.json();
           const name = data.user?.name || data.name;
-          if (name && !inputNickname) {
-            setInputNickname(name);
+          if (name) {
+            setInputNickname((prev) => prev || name);
           }
         }
-      } catch (err) {
+      } catch {
         // Silently continue
       } finally {
         setLoadingUser(false);
