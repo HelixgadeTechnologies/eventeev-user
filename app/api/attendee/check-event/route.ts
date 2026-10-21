@@ -81,12 +81,31 @@ export async function GET(req: NextRequest) {
           const ticket = await Ticket.findOne(ticketQuery);
 
           if (ticket) {
+            try {
+              await Attendee.findByIdAndUpdate(attendee._id, {
+                isCheckedIn: true,
+                checkInTime: (attendee as any).checkInTime || new Date(),
+                status: "verified",
+              });
+              if (!(ticket as any).isCheckedIn) {
+                (ticket as any).isCheckedIn = true;
+                (ticket as any).checkInTime = (ticket as any).checkInTime || new Date();
+                await ticket.save();
+              }
+            } catch (_) {}
+
             const token = signToken({
               id: attendee._id.toString(),
               email: attendee.email,
               name: attendee.name,
               attendee: { id: attendee._id.toString(), email: attendee.email, name: attendee.name },
             });
+
+            // Asynchronously sync check-in with upstream Render backend
+            fetch(`${API_BASE_URL}/api/attendee/check-in-self`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}`, "x-auth-token": token, "Content-Type": "application/json" },
+            }).catch(() => {});
 
             return NextResponse.json({
               isAttendee: true,
@@ -108,6 +127,14 @@ export async function GET(req: NextRequest) {
             });
 
             if (attendeeWithEvent) {
+              try {
+                await Attendee.findByIdAndUpdate(attendeeWithEvent._id, {
+                  isCheckedIn: true,
+                  checkInTime: (attendeeWithEvent as any).checkInTime || new Date(),
+                  status: "verified",
+                });
+              } catch (_) {}
+
               const token = signToken({
                 id: attendeeWithEvent._id.toString(),
                 email: attendeeWithEvent.email,
@@ -118,6 +145,11 @@ export async function GET(req: NextRequest) {
                   name: attendeeWithEvent.name,
                 },
               });
+
+              fetch(`${API_BASE_URL}/api/attendee/check-in-self`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "x-auth-token": token, "Content-Type": "application/json" },
+              }).catch(() => {});
 
               return NextResponse.json({
                 isAttendee: true,
@@ -136,7 +168,17 @@ export async function GET(req: NextRequest) {
             orderId,
             tier: "General Admission",
             status: "valid",
+            isCheckedIn: true,
+            checkInTime: new Date(),
           });
+
+          try {
+            await Attendee.findByIdAndUpdate(attendee._id, {
+              isCheckedIn: true,
+              checkInTime: new Date(),
+              status: "verified",
+            });
+          } catch (_) {}
 
           const token = signToken({
             id: attendee._id.toString(),
@@ -144,6 +186,11 @@ export async function GET(req: NextRequest) {
             name: attendee.name,
             attendee: { id: attendee._id.toString(), email: attendee.email, name: attendee.name },
           });
+
+          fetch(`${API_BASE_URL}/api/attendee/check-in-self`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "x-auth-token": token, "Content-Type": "application/json" },
+          }).catch(() => {});
 
           return NextResponse.json({
             isAttendee: true,

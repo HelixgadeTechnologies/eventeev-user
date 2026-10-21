@@ -5,6 +5,8 @@ export interface ChatParticipant {
   role?: "organizer" | "attendee" | "admin" | string;
   modelType?: "User" | "Attendee";
   status?: string;
+  isCheckedIn?: boolean;
+  checkInTime?: string | null;
   isCurrentUser?: boolean;
 }
 
@@ -319,5 +321,20 @@ export const chatService = {
       displayName: targetParticipant?.name || room.displayName || room.name,
       otherParticipant: targetParticipant || room.otherParticipant,
     };
+  },
+
+  /**
+   * Self check-in attendee to enable live event chat and presence
+   */
+  async checkInSelf(token: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/attendee/check-in-self`, {
+        method: "POST",
+        headers: getHeaders(token),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 };

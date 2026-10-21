@@ -28,13 +28,34 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
     // 1. Try upstream backend chat participants endpoint first
     if (token) {
       try {
-        const upstreamRes = await fetch(`${API_BASE_URL}/api/chat/participants/${eventId}`, {
+        let upstreamRes = await fetch(`${API_BASE_URL}/api/chat/participants/${eventId}`, {
           headers: {
             "Authorization": `Bearer ${token}`,
             "x-auth-token": token,
           },
           cache: "no-store",
         });
+
+        // If rejected due to check-in restriction, automatically trigger self check-in and retry
+        if (upstreamRes.status === 403) {
+          try {
+            await fetch(`${API_BASE_URL}/api/attendee/check-in-self`, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "x-auth-token": token,
+                "Content-Type": "application/json",
+              },
+            });
+            upstreamRes = await fetch(`${API_BASE_URL}/api/chat/participants/${eventId}`, {
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "x-auth-token": token,
+              },
+              cache: "no-store",
+            });
+          } catch (_) {}
+        }
 
         if (upstreamRes.ok) {
           const upstreamData = await upstreamRes.json();
@@ -100,6 +121,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
               role: "attendee",
               modelType: "Attendee",
               status: t.status,
+              isCheckedIn: Boolean(t.isCheckedIn || t.status === "used" || att.isCheckedIn || att.checkInTime),
+              checkInTime: t.checkInTime || att.checkInTime || null,
               isCurrentUser: requesterId ? attId === String(requesterId) : false,
             });
           }
@@ -110,7 +133,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
           const rawAttendees = await Attendee.find({
             eventId,
             status: { $ne: "cancelled" },
-          }).select("name email avatarUrl status");
+          }).select("name email avatarUrl status isCheckedIn checkInTime");
 
           for (const att of rawAttendees) {
             const attId = String(att._id);
@@ -122,6 +145,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
                 role: "attendee",
                 modelType: "Attendee",
                 status: (att as any).status || "verified",
+                isCheckedIn: Boolean((att as any).isCheckedIn || (att as any).checkInTime || (att as any).status === "verified"),
+                checkInTime: (att as any).checkInTime || null,
                 isCurrentUser: requesterId ? attId === String(requesterId) : false,
               });
             }
@@ -180,6 +205,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
                   role: "attendee",
                   modelType: "Attendee",
                   status: item.status || "verified",
+                  isCheckedIn: Boolean(item.isCheckedIn || item.checkInTime || item.status === "verified"),
+                  checkInTime: item.checkInTime || null,
                   isCurrentUser: requesterId ? aId === String(requesterId) : false,
                 });
               }

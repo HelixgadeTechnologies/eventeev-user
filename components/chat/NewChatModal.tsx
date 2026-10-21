@@ -45,6 +45,16 @@ export function NewChatModal({
       setAttendees(result.attendees);
     } catch (err: any) {
       console.warn("Failed to load participants:", err);
+      // If blocked by check-in rule, automatically perform self check-in and retry
+      if (effectiveToken && (err?.message?.includes("checked in") || err?.status === 403)) {
+        try {
+          await chatService.checkInSelf(effectiveToken);
+          const retryResult = await chatService.getParticipants(effectiveEventId, effectiveToken);
+          setOrganizer(retryResult.organizer);
+          setAttendees(retryResult.attendees);
+          return;
+        } catch (_) {}
+      }
       setError(err?.message || "Could not retrieve participants");
     } finally {
       setLoading(false);
@@ -116,6 +126,18 @@ export function NewChatModal({
 
         {/* Participants List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-2xl flex items-center justify-between text-xs text-red-700">
+              <span className="font-medium truncate mr-2">{error}</span>
+              <button
+                onClick={fetchParticipants}
+                className="font-bold underline hover:text-red-900 flex-shrink-0"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
           {loading ? (
             <div className="py-12 flex flex-col items-center justify-center gap-2">
               <Loader2 className="w-8 h-8 animate-spin text-eventeev-orange" />
@@ -225,9 +247,17 @@ export function NewChatModal({
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm text-eventeev-navy group-hover:text-eventeev-orange truncate">
-                            {attendee.name}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-sm text-eventeev-navy group-hover:text-eventeev-orange truncate">
+                              {attendee.name}
+                            </p>
+                            {attendee.isCheckedIn && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-700 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Checked In
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[11px] text-slate-400 capitalize">Attendee</p>
                         </div>
                       </button>

@@ -6,6 +6,8 @@ export interface ITicket extends Document {
   orderId: string;
   tier?: string;
   status: 'valid' | 'used' | 'cancelled' | 'pending';
+  isCheckedIn?: boolean;
+  checkInTime?: Date;
   createdAt: Date;
 }
 
@@ -15,8 +17,10 @@ const TicketSchema: Schema = new Schema({
   orderId: { type: String, required: true, unique: true },
   tier: { type: String, default: 'General Admission' },
   status: { type: String, enum: ['valid', 'used', 'cancelled', 'pending'], default: 'valid' },
+  isCheckedIn: { type: Boolean, default: false },
+  checkInTime: { type: Date },
   createdAt: { type: Date, default: Date.now },
-});
+}, { strict: false });
 
 // Delete the model if it exists to prevent hot-reload caching issues with enums
 if (mongoose.models.Ticket) {

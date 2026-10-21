@@ -74,6 +74,9 @@ export default function ChatPage() {
 
     const initData = async () => {
       try {
+        // Assert attendee check-in status so chat room and directory access is permitted
+        chatService.checkInSelf(storedToken).catch(() => {});
+
         // Fetch Current Attendee Profile
         const userRes = await fetch("/api/attendee/me", {
           headers: { Authorization: `Bearer ${storedToken}` },
