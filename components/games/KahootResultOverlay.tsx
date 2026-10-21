@@ -117,6 +117,11 @@ export function KahootResultOverlay({
             Current Rank: #{rank}
           </p>
         )}
+
+        <div className="mt-5 flex items-center justify-center gap-2 text-white/90 font-bold text-xs bg-black/25 px-4 py-2.5 rounded-2xl backdrop-blur-xs border border-white/10">
+          <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+          <span>Waiting for host to start next question...</span>
+        </div>
       </div>
     </motion.div>
   );
