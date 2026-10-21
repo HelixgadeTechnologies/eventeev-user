@@ -9,6 +9,8 @@ import { KahootWaitingLobby } from "@/components/games/KahootWaitingLobby";
 import { KahootAnswerLocked } from "@/components/games/KahootAnswerLocked";
 import { KahootResultOverlay } from "@/components/games/KahootResultOverlay";
 import { KahootPodium } from "@/components/games/KahootPodium";
+import { KahootGameCountdown } from "@/components/games/KahootGameCountdown";
+import { KahootQuestionIntro } from "@/components/games/KahootQuestionIntro";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function GamesPage() {
@@ -27,6 +29,8 @@ export default function GamesPage() {
     totalScore,
     streak,
     timeLeft,
+    countdownTimeLeft,
+    introTimeLeft,
     error,
     isSandbox,
     joinGame,
@@ -208,6 +212,27 @@ export default function GamesPage() {
               onLeave={leaveGame}
               onStartDemo={startSandboxDemo}
               isSandbox={isSandbox}
+            />
+          )}
+
+          {/* STATE: Initial 5-Second Game Countdown (Synced with Admin Screen) */}
+          {gameState === "game_countdown" && (
+            <KahootGameCountdown
+              key="game_countdown"
+              count={countdownTimeLeft}
+              pin={pin}
+            />
+          )}
+
+          {/* STATE: 3-Second Question Intro Teaser Delay (Synced with Admin Screen) */}
+          {gameState === "question_intro" && (
+            <KahootQuestionIntro
+              key={`question_intro_${currentQuestion?.questionIndex ?? 0}`}
+              questionNumber={(currentQuestion?.questionIndex ?? 0) + 1}
+              totalQuestions={currentQuestion?.totalQuestions ?? 3}
+              questionText={currentQuestion?.question}
+              category={currentQuestion?.category}
+              introTimeLeft={introTimeLeft}
             />
           )}
 
