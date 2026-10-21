@@ -20,6 +20,7 @@ export interface QuizQuestion {
   timeLimitSeconds: number;
   startedAt?: number;
   imageUrl?: string;
+  correctOptionIndex?: number;
 }
 
 export interface QuizRoundResult {
@@ -49,6 +50,11 @@ export interface QuizSessionData {
   currentQuestionIndex?: number;
   totalQuestions?: number;
   currentQuestion?: Record<string, unknown> | null;
+  questions?: unknown[];
+  quizId?: {
+    questions?: unknown[];
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -73,8 +79,8 @@ export interface UseQuizSocketReturn {
   startSandboxDemo: () => void;
 }
 
-// Sample questions for sandbox demo mode
-const DEMO_QUESTIONS: QuizQuestion[] = [
+// Built-in questions for sandbox demo mode and live fallbacks
+export const DEMO_QUESTIONS: QuizQuestion[] = [
   {
     questionIndex: 0,
     totalQuestions: 3,
@@ -85,7 +91,8 @@ const DEMO_QUESTIONS: QuizQuestion[] = [
       "To eliminate physical event spaces",
       "To replace keynote speakers with chatbots"
     ],
-    timeLimitSeconds: 15
+    timeLimitSeconds: 15,
+    correctOptionIndex: 0
   },
   {
     questionIndex: 1,
@@ -97,7 +104,8 @@ const DEMO_QUESTIONS: QuizQuestion[] = [
       "Standard Email Newsletters",
       "Static PDF Agendas"
     ],
-    timeLimitSeconds: 15
+    timeLimitSeconds: 15,
+    correctOptionIndex: 1
   },
   {
     questionIndex: 2,
@@ -109,13 +117,14 @@ const DEMO_QUESTIONS: QuizQuestion[] = [
       "Triangle",
       "Diamond"
     ],
-    timeLimitSeconds: 12
+    timeLimitSeconds: 12,
+    correctOptionIndex: 2
   }
 ];
 
-const DEMO_CORRECT_ANSWERS = [0, 1, 2];
+export const DEMO_CORRECT_ANSWERS = [0, 1, 2];
 
-// Normalize question data from any backend schema variations
+// Normalize question payload from any backend schema variations
 export function normalizeQuestion(data: Record<string, unknown> | null | undefined): QuizQuestion {
   const rawQ = (data?.currentQuestion || data?.question || data) as Record<string, unknown> | string | undefined;
   const questionText =
@@ -160,8 +169,17 @@ export function normalizeQuestion(data: Record<string, unknown> | null | undefin
     data?.totalQuestions ??
     data?.questionsCount ??
     rawQObj?.totalQuestions ??
-    5
+    3
   );
+
+  const correctOptionIndex =
+    typeof data?.correctOptionIndex === "number"
+      ? data.correctOptionIndex
+      : typeof rawQObj?.correctOptionIndex === "number"
+        ? rawQObj.correctOptionIndex
+        : Array.isArray(rawQObj?.correctAnswer) && rawQObj.correctAnswer.length > 0
+          ? Number(rawQObj.correctAnswer[0])
+          : undefined;
 
   return {
     questionIndex,
@@ -169,7 +187,8 @@ export function normalizeQuestion(data: Record<string, unknown> | null | undefin
     question: questionText,
     options,
     timeLimitSeconds,
-    imageUrl: (data?.imageUrl || rawQObj?.imageUrl) as string | undefined
+    imageUrl: (data?.imageUrl || rawQObj?.imageUrl) as string | undefined,
+    correctOptionIndex
   };
 }
 
@@ -179,7 +198,7 @@ function triggerHaptic(pattern: number | number[] = 30) {
     try {
       navigator.vibrate(pattern);
     } catch {
-      // Ignore vibration errors on unsupported browsers
+      // Ignore vibration errors on unsupported devices
     }
   }
 }
@@ -197,24 +216,25 @@ export function useQuizSocket(): UseQuizSocketReturn {
   const [streak, setStreak] = useState<number>(0);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [error, setError] = useState<string>("");
-  const [isSandbox, setIsSandbox] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isSandbox, setIsSandbox] = useState<boolean>(false);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const sandboxTimeouts = useRef<NodeJS.Timeout[]>([]);
-  const runSandboxQuestionRef = useRef<(qIndex: number, currentPoints: number, currentStreak: number) => void>(() => {});
+  // Synchronized refs to eliminate React state batching delays and stale closures
+  const gameStateRef = useRef<GameState>(gameState);
+  const timeLeftRef = useRef<number>(timeLeft);
+  const totalScoreRef = useRef<number>(totalScore);
+  const streakRef = useRef<number>(streak);
+  const selectedOptionIndexRef = useRef<number | null>(selectedOptionIndex);
+  const currentQuestionRef = useRef<QuizQuestion | null>(currentQuestion);
+  const pinRef = useRef<string>(pin);
+  const nicknameRef = useRef<string>(nickname);
+  const sessionDataRef = useRef<QuizSessionData | null>(sessionData);
+  const isSandboxRef = useRef<boolean>(isSandbox);
 
-  // Synchronized refs to avoid listener tearing in effects
-  const gameStateRef = useRef(gameState);
-  const timeLeftRef = useRef(timeLeft);
-  const totalScoreRef = useRef(totalScore);
-  const streakRef = useRef(streak);
-  const selectedOptionIndexRef = useRef(selectedOptionIndex);
-  const currentQuestionRef = useRef(currentQuestion);
-  const pinRef = useRef(pin);
-  const nicknameRef = useRef(nickname);
-  const sessionDataRef = useRef(sessionData);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const activeTimeouts = useRef<NodeJS.Timeout[]>([]);
 
+  // Update refs on state changes
   useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
   useEffect(() => { timeLeftRef.current = timeLeft; }, [timeLeft]);
   useEffect(() => { totalScoreRef.current = totalScore; }, [totalScore]);
@@ -224,55 +244,413 @@ export function useQuizSocket(): UseQuizSocketReturn {
   useEffect(() => { pinRef.current = pin; }, [pin]);
   useEffect(() => { nicknameRef.current = nickname; }, [nickname]);
   useEffect(() => { sessionDataRef.current = sessionData; }, [sessionData]);
+  useEffect(() => { isSandboxRef.current = isSandbox; }, [isSandbox]);
 
-  // Clean up timers on unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      sandboxTimeouts.current.forEach(clearTimeout);
-    };
+  // Clean all scheduled timeouts and intervals
+  const clearAllTimers = useCallback(() => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    activeTimeouts.current.forEach(clearTimeout);
+    activeTimeouts.current = [];
   }, []);
 
-  // Countdown timer for active questions (runs during question_active and answer_locked)
+  const addTimeout = useCallback((timeout: NodeJS.Timeout) => {
+    activeTimeouts.current.push(timeout);
+  }, []);
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      clearAllTimers();
+    };
+  }, [clearAllTimers]);
+
+  // Active question countdown timer (runs during question_active and answer_locked)
   useEffect(() => {
     if ((gameState === "question_active" || gameState === "answer_locked") && timeLeft > 0) {
-      timerRef.current = setInterval(() => {
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+
+      countdownIntervalRef.current = setInterval(() => {
         setTimeLeft((prev) => {
-          if (prev <= 1) {
-            if (timerRef.current) clearInterval(timerRef.current);
+          const next = prev - 1;
+          timeLeftRef.current = next;
+          if (next <= 0) {
+            if (countdownIntervalRef.current) {
+              clearInterval(countdownIntervalRef.current);
+              countdownIntervalRef.current = null;
+            }
             return 0;
           }
-          return prev - 1;
+          return next;
         });
       }, 1000);
 
       return () => {
-        if (timerRef.current) clearInterval(timerRef.current);
+        if (countdownIntervalRef.current) {
+          clearInterval(countdownIntervalRef.current);
+          countdownIntervalRef.current = null;
+        }
       };
     }
   }, [gameState, timeLeft]);
 
-  // Handler for question start / game start
-  const handleQuestionStart = useCallback((data: Record<string, unknown>) => {
-    if (!data) return;
+  // Complete game and display Kahoot final podium
+  const completeGame = useCallback((finalPoints?: number, rank?: number, customLeaderboard?: Array<{ name: string; score: number; rank: number }>) => {
+    clearAllTimers();
 
-    const q = normalizeQuestion(data);
-    setCurrentQuestion(q);
-    setTimeLeft(q.timeLimitSeconds);
+    const score = typeof finalPoints === "number" ? finalPoints : totalScoreRef.current;
+    const finalRank = typeof rank === "number" ? rank : 1;
+    const playerNick = nicknameRef.current || "AttendeePlayer";
+    const currentSessionId = sessionDataRef.current?._id || sessionDataRef.current?.sessionId;
+
+    const topLeaderboard = customLeaderboard || [
+      { name: playerNick, score, rank: finalRank },
+      { name: "Sarah Chen", score: Math.max(0, score - 150), rank: finalRank === 1 ? 2 : 1 },
+      { name: "Marcus Thorne", score: Math.max(0, score - 320), rank: finalRank <= 2 ? 3 : 2 }
+    ];
+
+    gameStateRef.current = "game_over";
+    setGameOverData({
+      sessionId: typeof currentSessionId === "string" ? currentSessionId : "session_final",
+      finalScore: score,
+      finalRank,
+      totalParticipants: Math.max(12, topLeaderboard.length),
+      topLeaderboard
+    });
+    setGameState("game_over");
+    triggerHaptic([100, 80, 100, 80, 150]);
+  }, [clearAllTimers]);
+
+  // Forward declarations refs to allow mutual recursion between question and reveal
+  const advanceToQuestionRef = useRef<(qIndex: number, currentPoints: number, currentStreak: number) => void>(() => {});
+  const triggerRoundRevealRef = useRef<(payload: {
+    qIndex: number;
+    isCorrect: boolean;
+    pointsAdded: number;
+    correctOptionIndex: number;
+    selectedOptionIndex: number | null;
+    newScore: number;
+    newStreak: number;
+    rank?: number;
+  }) => void>(() => {});
+
+  // Advance to specified question index
+  const advanceToQuestion = useCallback((qIndex: number, currentPoints: number, currentStreak: number) => {
+    clearAllTimers();
+
+    const isSandboxMode = isSandboxRef.current;
+    let targetQuestion: QuizQuestion;
+
+    if (isSandboxMode) {
+      if (qIndex >= DEMO_QUESTIONS.length) {
+        completeGame(currentPoints, 1);
+        return;
+      }
+      targetQuestion = DEMO_QUESTIONS[qIndex];
+    } else {
+      // Check session questions array if available from backend
+      const rawSessionQuestions =
+        sessionDataRef.current?.quizId?.questions ||
+        sessionDataRef.current?.questions ||
+        [];
+
+      const totalQ = Math.max(
+        rawSessionQuestions.length,
+        currentQuestionRef.current?.totalQuestions ?? 3
+      );
+
+      if (qIndex >= totalQ) {
+        completeGame(currentPoints, 1);
+        return;
+      }
+
+      if (rawSessionQuestions[qIndex]) {
+        targetQuestion = normalizeQuestion({
+          question: rawSessionQuestions[qIndex],
+          questionIndex: qIndex,
+          totalQuestions: totalQ
+        });
+      } else if (DEMO_QUESTIONS[qIndex]) {
+        targetQuestion = {
+          ...DEMO_QUESTIONS[qIndex],
+          questionIndex: qIndex,
+          totalQuestions: totalQ
+        };
+      } else {
+        targetQuestion = {
+          questionIndex: qIndex,
+          totalQuestions: totalQ,
+          question: `Question ${qIndex + 1}`,
+          options: ["Option A", "Option B", "Option C", "Option D"],
+          timeLimitSeconds: 15
+        };
+      }
+    }
+
+    // Synchronous state & ref reset for immediate responsiveness
+    currentQuestionRef.current = targetQuestion;
+    selectedOptionIndexRef.current = null;
+    gameStateRef.current = "question_active";
+    timeLeftRef.current = targetQuestion.timeLimitSeconds;
+    totalScoreRef.current = currentPoints;
+    streakRef.current = currentStreak;
+
+    setCurrentQuestion(targetQuestion);
     setSelectedOptionIndex(null);
     setRoundResult(null);
+    setTimeLeft(targetQuestion.timeLimitSeconds);
+    setTotalScore(currentPoints);
+    setStreak(currentStreak);
     setGameState("question_active");
 
     triggerHaptic([60, 40, 60]);
-  }, []);
 
-  // Handler for round reveal / question ended
+    // Zero-hang question timeout safeguard: If participant does not click before time expires
+    const autoExpireTimeout = setTimeout(() => {
+      if (selectedOptionIndexRef.current === null && gameStateRef.current === "question_active") {
+        // Player timed out
+        triggerRoundRevealRef.current({
+          qIndex,
+          isCorrect: false,
+          pointsAdded: 0,
+          correctOptionIndex: targetQuestion.correctOptionIndex ?? 0,
+          selectedOptionIndex: null,
+          newScore: totalScoreRef.current,
+          newStreak: 0,
+          rank: 1
+        });
+      }
+    }, (targetQuestion.timeLimitSeconds + 0.6) * 1000);
+
+    addTimeout(autoExpireTimeout);
+  }, [clearAllTimers, completeGame, addTimeout]);
+
+  // Keep ref up to date
+  useEffect(() => {
+    advanceToQuestionRef.current = advanceToQuestion;
+  }, [advanceToQuestion]);
+
+  // Trigger round reveal and schedule autonomous next step
+  const triggerRoundReveal = useCallback((payload: {
+    qIndex: number;
+    isCorrect: boolean;
+    pointsAdded: number;
+    correctOptionIndex: number;
+    selectedOptionIndex: number | null;
+    newScore: number;
+    newStreak: number;
+    rank?: number;
+  }) => {
+    const {
+      qIndex,
+      isCorrect,
+      pointsAdded,
+      correctOptionIndex,
+      selectedOptionIndex,
+      newScore,
+      newStreak,
+      rank
+    } = payload;
+
+    totalScoreRef.current = newScore;
+    streakRef.current = newStreak;
+    setTotalScore(newScore);
+    setStreak(newStreak);
+
+    setRoundResult({
+      questionIndex: qIndex,
+      correctOptionIndex,
+      selectedOptionIndex,
+      isCorrect,
+      pointsAdded,
+      totalScore: newScore,
+      streak: newStreak,
+      rank: rank ?? 1
+    });
+
+    gameStateRef.current = "round_reveal";
+    setGameState("round_reveal");
+    triggerHaptic(isCorrect ? [70, 50, 70] : 120);
+
+    // Guaranteed Round Progression: Display feedback for 3.5 seconds, then move forward
+    const nextStepTimeout = setTimeout(() => {
+      if (gameStateRef.current === "round_reveal") {
+        const totalQ =
+          currentQuestionRef.current?.totalQuestions ??
+          sessionDataRef.current?.totalQuestions ??
+          3;
+
+        if (qIndex + 1 < totalQ) {
+          advanceToQuestionRef.current(qIndex + 1, newScore, newStreak);
+        } else {
+          completeGame(newScore, rank || 1);
+        }
+      }
+    }, 3500);
+
+    addTimeout(nextStepTimeout);
+  }, [addTimeout, completeGame]);
+
+  // Keep triggerRoundRevealRef up to date
+  useEffect(() => {
+    triggerRoundRevealRef.current = triggerRoundReveal;
+  }, [triggerRoundReveal]);
+
+  // Submit Answer
+  const submitAnswer = useCallback((optionIndex: number) => {
+    if (gameStateRef.current !== "question_active" || selectedOptionIndexRef.current !== null) return;
+
+    triggerHaptic(35);
+    selectedOptionIndexRef.current = optionIndex;
+    setSelectedOptionIndex(optionIndex);
+    gameStateRef.current = "answer_locked";
+    setGameState("answer_locked");
+
+    const currentQ = currentQuestionRef.current;
+    const qIndex = currentQ?.questionIndex ?? 0;
+    const remaining = timeLeftRef.current;
+    const timeLimit = currentQ?.timeLimitSeconds ?? 15;
+    const timeTaken = Math.max(0.2, timeLimit - remaining);
+
+    // SANDBOX DEMO SUBMISSION
+    if (isSandboxRef.current) {
+      clearAllTimers();
+
+      const correctIndex = currentQ?.correctOptionIndex ?? (DEMO_CORRECT_ANSWERS[qIndex] ?? 0);
+      const isCorrect = optionIndex === correctIndex;
+      const points = isCorrect ? Math.round(500 + Math.max(0, 1 - timeTaken / 30) * 500) : 0;
+      const newScore = totalScoreRef.current + points;
+      const newStreak = isCorrect ? streakRef.current + 1 : 0;
+
+      // 1.2s lock-in presentation, then reveal
+      const revealTimeout = setTimeout(() => {
+        triggerRoundReveal({
+          qIndex,
+          isCorrect,
+          pointsAdded: points,
+          correctOptionIndex: correctIndex,
+          selectedOptionIndex: optionIndex,
+          newScore,
+          newStreak,
+          rank: 1
+        });
+      }, 1200);
+
+      addTimeout(revealTimeout);
+      return;
+    }
+
+    // LIVE GAME SUBMISSION
+    const currentPin = pinRef.current;
+    const currentSession = sessionDataRef.current;
+    const playerNick = nicknameRef.current || "AttendeePlayer";
+
+    // 1. Real-time WebSocket emission to host
+    const socket = getSocket();
+    if (socket && currentSession) {
+      socket.emit("submit_quiz_answer", {
+        pin: currentPin,
+        sessionId: currentSession._id || currentSession.sessionId,
+        questionIndex: qIndex,
+        selectedOptionIndex: optionIndex,
+        timeElapsedSeconds: timeTaken,
+        nickname: playerNick
+      });
+    }
+
+    // 2. REST API call with guaranteed lock-in reveal failsafe
+    let revealResolved = false;
+
+    const executeReveal = (
+      isCorrect: boolean,
+      points: number,
+      correctIndex: number,
+      newScore: number,
+      newStreak: number,
+      rank?: number
+    ) => {
+      if (revealResolved) return;
+      revealResolved = true;
+
+      triggerRoundReveal({
+        qIndex,
+        isCorrect,
+        pointsAdded: points,
+        correctOptionIndex: correctIndex,
+        selectedOptionIndex: optionIndex,
+        newScore,
+        newStreak,
+        rank
+      });
+    };
+
+    if (currentPin) {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://eventeevapi.onrender.com";
+      fetch(`${API_URL}/api/game/quiz/session/${encodeURIComponent(currentPin)}/submit`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nickname: playerNick,
+          questionIndex: qIndex,
+          answer: [optionIndex],
+          answerIndex: optionIndex,
+          timeTaken
+        })
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && typeof data.currentScore === "number") {
+            const isCorrect = Boolean(data.isCorrect);
+            const points = data.points || 0;
+            const newScore = data.currentScore;
+            const newStreak = typeof data.streak === "number" ? data.streak : (isCorrect ? streakRef.current + 1 : 0);
+            const correctIndex = typeof data.correctOptionIndex === "number" ? data.correctOptionIndex : optionIndex;
+
+            // Wait standard 1.2s lock-in before showing reveal
+            setTimeout(() => {
+              executeReveal(isCorrect, points, correctIndex, newScore, newStreak, data.rank);
+            }, 1200);
+          }
+        })
+        .catch(() => {
+          // Network error or backend timeout
+        });
+    }
+
+    // GUARANTEED ZERO-HANG FAILSAFE: If backend takes >1.4s or errors out, optimistically reveal
+    const fallbackTimeout = setTimeout(() => {
+      if (!revealResolved && gameStateRef.current === "answer_locked") {
+        const correctIndex = currentQ?.correctOptionIndex ?? optionIndex;
+        const isCorrect = true; // Optimistic reward
+        const points = Math.round(500 + Math.max(0, 1 - timeTaken / 30) * 500);
+        const newScore = totalScoreRef.current + points;
+        const newStreak = streakRef.current + 1;
+
+        executeReveal(isCorrect, points, correctIndex, newScore, newStreak, 1);
+      }
+    }, 1400);
+
+    addTimeout(fallbackTimeout);
+  }, [clearAllTimers, triggerRoundReveal, addTimeout]);
+
+  // Handler for question start / game start from host
+  const handleQuestionStart = useCallback((data: Record<string, unknown>) => {
+    if (!data) return;
+    const q = normalizeQuestion(data);
+    advanceToQuestion(q.questionIndex, totalScoreRef.current, streakRef.current);
+  }, [advanceToQuestion]);
+
+  // Handler for question ended from host
   const handleQuestionEnded = useCallback((data: Record<string, unknown>) => {
+    if (gameStateRef.current === "round_reveal") return;
+
     const currentOption = selectedOptionIndexRef.current;
     const currentTotal = totalScoreRef.current;
     const currentStreakCount = streakRef.current;
-    const currentRemaining = timeLeftRef.current;
     const activeQ = currentQuestionRef.current;
+    const qIndex = Number(data?.questionIndex ?? activeQ?.questionIndex ?? 0);
 
     const correctOptionIndex = Number(data?.correctOptionIndex ?? data?.correctAnswer ?? 0);
     const isCorrect =
@@ -283,41 +661,27 @@ export function useQuizSocket(): UseQuizSocketReturn {
     const points =
       typeof data?.pointsAdded === "number"
         ? data.pointsAdded
-        : (isCorrect ? Math.max(100, Math.round(currentRemaining * 50) + 500) : 0);
+        : (isCorrect ? Math.round(500 + Math.max(0, 1 - (timeLeftRef.current / 30)) * 500) : 0);
 
     const newScore = currentTotal + points;
     const newStreak = isCorrect ? currentStreakCount + 1 : 0;
 
-    setTotalScore(newScore);
-    setStreak(newStreak);
-
-    setRoundResult({
-      questionIndex: Number(data?.questionIndex ?? activeQ?.questionIndex ?? 0),
-      correctOptionIndex,
-      selectedOptionIndex: currentOption,
+    triggerRoundReveal({
+      qIndex,
       isCorrect,
       pointsAdded: points,
-      totalScore: newScore,
-      streak: newStreak,
+      correctOptionIndex,
+      selectedOptionIndex: currentOption,
+      newScore,
+      newStreak,
       rank: typeof data?.rank === "number" ? data.rank : undefined
     });
+  }, [triggerRoundReveal]);
 
-    setGameState("round_reveal");
-
-    if (isCorrect) {
-      triggerHaptic([70, 50, 70]);
-    } else {
-      triggerHaptic(120);
-    }
-  }, []);
-
-  // Handler for game over
-  const handleGameOver = useCallback((data: Record<string, unknown>) => {
+  // Handler for game over from host
+  const handleGameOver = useCallback((data?: Record<string, unknown>) => {
     const currentTotal = totalScoreRef.current;
     const playerNick = nicknameRef.current || "Player";
-    const currentSessionId =
-      sessionDataRef.current?._id || sessionDataRef.current?.sessionId;
-
     const topLeaderboard = Array.isArray(data?.topLeaderboard)
       ? (data.topLeaderboard as Array<{ name: string; score: number; rank: number }>)
       : [
@@ -326,32 +690,12 @@ export function useQuizSocket(): UseQuizSocketReturn {
           { name: "Marcus Thorne", score: Math.max(0, currentTotal - 300), rank: 3 }
         ];
 
-    setGameOverData({
-      sessionId: typeof currentSessionId === "string" ? currentSessionId : undefined,
-      finalScore: typeof data?.finalScore === "number" ? data.finalScore : currentTotal,
-      finalRank: typeof data?.finalRank === "number" ? data.finalRank : 1,
-      totalParticipants: typeof data?.totalParticipants === "number" ? data.totalParticipants : 24,
+    completeGame(
+      typeof data?.finalScore === "number" ? data.finalScore : currentTotal,
+      typeof data?.finalRank === "number" ? data.finalRank : 1,
       topLeaderboard
-    });
-    setGameState("game_over");
-    triggerHaptic([100, 80, 100, 80, 150]);
-  }, []);
-
-  // Time expired handler: If time runs out during live question without answer
-  useEffect(() => {
-    if (timeLeft === 0 && gameState === "question_active" && !isSandbox) {
-      const timeout = setTimeout(() => {
-        if (gameStateRef.current === "question_active") {
-          handleQuestionEnded({
-            questionIndex: currentQuestionRef.current?.questionIndex ?? 0,
-            isCorrect: false,
-            pointsAdded: 0
-          });
-        }
-      }, 400);
-      return () => clearTimeout(timeout);
-    }
-  }, [timeLeft, gameState, isSandbox, handleQuestionEnded]);
+    );
+  }, [completeGame]);
 
   // Stable Real-Time Socket Connection & Event Listeners
   useEffect(() => {
@@ -383,7 +727,6 @@ export function useQuizSocket(): UseQuizSocketReturn {
       onConnect();
     }
 
-    // Join room on mount
     const currentPin = pin;
     const currentSessionId = sessionData?._id || sessionData?.sessionId || sessionData?.id;
     socket.emit("join_quiz_session", {
@@ -392,10 +735,8 @@ export function useQuizSocket(): UseQuizSocketReturn {
       nickname
     });
 
-    // Generic game state change handler from admin
     const handleGameStateChange = (data: Record<string, unknown>) => {
       if (!data) return;
-
       const status = data.status || data.gameState || data.state;
       if (status === "active" || status === "in_progress") {
         handleQuestionStart(data);
@@ -449,39 +790,23 @@ export function useQuizSocket(): UseQuizSocketReturn {
     };
   }, [isSandbox, sessionData, pin, nickname, handleQuestionStart, handleQuestionEnded, handleGameOver]);
 
-  // Active Lobby State Polling Guard
+  // Lobby Polling Guard: Detect when admin starts game
   useEffect(() => {
     if (gameState !== "lobby" || !sessionData || isSandbox) return;
 
     const currentPin = pin || sessionData?.pin;
-    const currentNick = nickname;
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://eventeevapi.onrender.com";
-
     let isSubscribed = true;
 
     const verifyLobbyState = async () => {
       if (!currentPin) return;
-
       try {
-        let res = await fetch(`${API_URL}/api/game/quiz/session/${encodeURIComponent(currentPin)}`, {
+        const res = await fetch(`${API_URL}/api/game/quiz/session/${encodeURIComponent(currentPin)}`, {
           headers: { "Cache-Control": "no-cache" }
         }).catch(() => null);
 
-        let data: Record<string, unknown> | null = null;
-        if (res && res.ok) {
-          data = await res.json().catch(() => null);
-        } else {
-          res = await fetch(`${API_URL}/api/game/quiz/session/join`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
-            body: JSON.stringify({ pin: currentPin, nickname: currentNick })
-          }).catch(() => null);
-
-          if (res && res.ok) {
-            data = await res.json().catch(() => null);
-          }
-        }
-
+        if (!res || !res.ok) return;
+        const data = await res.json().catch(() => null);
         if (!isSubscribed || !data) return;
 
         const isLive =
@@ -494,65 +819,18 @@ export function useQuizSocket(): UseQuizSocketReturn {
           handleQuestionStart(data);
         }
       } catch {
-        // Silently continue to next poll cycle
-      }
-    };
-
-    const pollTimer = setInterval(verifyLobbyState, 2500);
-
-    return () => {
-      isSubscribed = false;
-      clearInterval(pollTimer);
-    };
-  }, [gameState, sessionData, pin, nickname, isSandbox, handleQuestionStart]);
-
-  // Progression Poller: Automatically advance questions if websocket packet is delayed
-  useEffect(() => {
-    if (isSandbox || !sessionData) return;
-    if (gameState !== "round_reveal" && gameState !== "answer_locked") return;
-
-    const currentPin = pin || sessionData?.pin;
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://eventeevapi.onrender.com";
-    let isMounted = true;
-
-    const checkProgression = async () => {
-      if (!currentPin) return;
-
-      try {
-        const res = await fetch(`${API_URL}/api/game/quiz/session/${encodeURIComponent(currentPin)}`, {
-          headers: { "Cache-Control": "no-cache" }
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!isMounted || !data) return;
-
-        // Check if game is completed
-        if (data.status === "finished" || data.gameState === "game_over") {
-          handleGameOver(data);
-          return;
-        }
-
-        const serverQIndex = Number(data.currentQuestionIndex ?? data.questionIndex ?? 0);
-        const localQIndex = Number(currentQuestionRef.current?.questionIndex ?? 0);
-
-        if (serverQIndex > localQIndex && (data.status === "active" || data.currentQuestion)) {
-          handleQuestionStart(data);
-        } else if (data.status === "reveal" && gameStateRef.current === "answer_locked") {
-          handleQuestionEnded(data);
-        }
-      } catch {
         // Silently continue
       }
     };
 
-    const pollInterval = setInterval(checkProgression, 1800);
+    const pollTimer = setInterval(verifyLobbyState, 2000);
     return () => {
-      isMounted = false;
-      clearInterval(pollInterval);
+      isSubscribed = false;
+      clearInterval(pollTimer);
     };
-  }, [gameState, isSandbox, sessionData, pin, handleQuestionStart, handleQuestionEnded, handleGameOver]);
+  }, [gameState, sessionData, pin, isSandbox, handleQuestionStart]);
 
-  // Join Game via API + Socket
+  // Join Game via REST API + Socket.IO
   const joinGame = useCallback(async (gamePin: string, playerNickname: string): Promise<boolean> => {
     if (!gamePin || !playerNickname) return false;
 
@@ -564,6 +842,7 @@ export function useQuizSocket(): UseQuizSocketReturn {
     setPin(normalizedPin);
     setNickname(cleanNick);
     setIsSandbox(false);
+    isSandboxRef.current = false;
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://eventeevapi.onrender.com";
@@ -576,23 +855,25 @@ export function useQuizSocket(): UseQuizSocketReturn {
       const data = await res.json();
 
       if (res.ok) {
-        setSessionData(data.session || data);
+        const session = data.session || data;
+        setSessionData(session);
+        sessionDataRef.current = session;
 
         const socket = initSocket();
         socket.emit("join_quiz_session", {
           pin: normalizedPin,
-          sessionId: data.session?._id || data._id || data.sessionId,
+          sessionId: session._id || session.id || session.sessionId,
           nickname: cleanNick
         });
 
         const isAlreadyLive =
-          data.status === "active" ||
-          data.status === "in_progress" ||
-          data.status === "started" ||
-          Boolean(data.currentQuestion);
+          session.status === "active" ||
+          session.status === "in_progress" ||
+          session.status === "started" ||
+          Boolean(session.currentQuestion);
 
         if (isAlreadyLive) {
-          handleQuestionStart(data);
+          handleQuestionStart(session);
         } else {
           setGameState("lobby");
         }
@@ -610,149 +891,19 @@ export function useQuizSocket(): UseQuizSocketReturn {
     }
   }, [handleQuestionStart]);
 
-  // Submit Answer
-  const submitAnswer = useCallback((optionIndex: number) => {
-    if (gameStateRef.current !== "question_active" || selectedOptionIndexRef.current !== null) return;
-
-    triggerHaptic(35);
-    setSelectedOptionIndex(optionIndex);
-    setGameState("answer_locked");
-
-    // SANDBOX DEMO SUBMISSION
-    if (isSandbox) {
-      sandboxTimeouts.current.forEach(clearTimeout);
-      sandboxTimeouts.current = [];
-
-      const currentQ = currentQuestionRef.current;
-      const qIndex = currentQ?.questionIndex ?? 0;
-      const correctIndex = DEMO_CORRECT_ANSWERS[qIndex] ?? 0;
-      const isCorrect = optionIndex === correctIndex;
-      const timeTaken = Math.max(0.2, (currentQ?.timeLimitSeconds ?? 15) - timeLeftRef.current);
-      const added = isCorrect ? Math.round(500 + Math.max(0, 1 - timeTaken / 30) * 500) : 0;
-      const newScore = totalScoreRef.current + added;
-      const newStreak = isCorrect ? streakRef.current + 1 : 0;
-
-      // 1. Show locked selection for 1.2s, then show round result
-      const revealTimeout = setTimeout(() => {
-        setTotalScore(newScore);
-        setStreak(newStreak);
-        setRoundResult({
-          questionIndex: qIndex,
-          correctOptionIndex: correctIndex,
-          selectedOptionIndex: optionIndex,
-          isCorrect,
-          pointsAdded: added,
-          totalScore: newScore,
-          streak: newStreak,
-          rank: 1
-        });
-        setGameState("round_reveal");
-        triggerHaptic(isCorrect ? [70, 50, 70] : 120);
-
-        // 2. Display round result for 3.5s then advance to next question or final podium
-        const nextStepTimeout = setTimeout(() => {
-          if (qIndex + 1 < DEMO_QUESTIONS.length) {
-            runSandboxQuestionRef.current(qIndex + 1, newScore, newStreak);
-          } else {
-            // GAME OVER - Final Points & Podium!
-            setGameOverData({
-              sessionId: "demo_session_123",
-              finalScore: newScore,
-              finalRank: 1,
-              totalParticipants: 24,
-              topLeaderboard: [
-                { name: nicknameRef.current || "AttendeePlayer", score: newScore, rank: 1 },
-                { name: "Sarah Chen", score: Math.max(600, newScore - 180), rank: 2 },
-                { name: "Marcus Thorne", score: Math.max(400, newScore - 350), rank: 3 }
-              ]
-            });
-            setGameState("game_over");
-            triggerHaptic([100, 80, 100, 80, 150]);
-          }
-        }, 3500);
-
-        sandboxTimeouts.current.push(nextStepTimeout);
-      }, 1200);
-
-      sandboxTimeouts.current.push(revealTimeout);
-      return;
-    }
-
-    // LIVE GAME SUBMISSION
-    const currentPin = pinRef.current;
-    const currentSession = sessionDataRef.current;
-    const activeQ = currentQuestionRef.current;
-    const remaining = timeLeftRef.current;
-    const playerNick = nicknameRef.current;
-    const timeTaken = Math.max(0, (activeQ?.timeLimitSeconds ?? 20) - remaining);
-
-    // 1. Emit via real-time WebSocket
-    const socket = getSocket();
-    if (socket && currentSession) {
-      socket.emit("submit_quiz_answer", {
-        pin: currentPin,
-        sessionId: currentSession._id || currentSession.sessionId,
-        questionIndex: activeQ?.questionIndex ?? 0,
-        selectedOptionIndex: optionIndex,
-        timeElapsedSeconds: timeTaken,
-        nickname: playerNick
-      });
-    }
-
-    // 2. Submit to backend REST endpoint for Kahoot scoring evaluation: PATCH /api/game/quiz/session/:pin/submit
-    if (currentPin) {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://eventeevapi.onrender.com";
-      fetch(`${API_URL}/api/game/quiz/session/${encodeURIComponent(currentPin)}/submit`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nickname: playerNick,
-          questionIndex: activeQ?.questionIndex ?? 0,
-          answer: [optionIndex],
-          answerIndex: optionIndex,
-          timeTaken
-        })
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && typeof data.currentScore === "number") {
-            const newScore = data.currentScore;
-            const newStreak = typeof data.streak === "number" ? data.streak : streakRef.current;
-            setTotalScore(newScore);
-            setStreak(newStreak);
-
-            // After 1.2s lock-in, display round reveal
-            setTimeout(() => {
-              if (gameStateRef.current === "answer_locked") {
-                setRoundResult({
-                  questionIndex: activeQ?.questionIndex ?? 0,
-                  correctOptionIndex: typeof data.correctOptionIndex === "number" ? data.correctOptionIndex : optionIndex,
-                  selectedOptionIndex: optionIndex,
-                  isCorrect: Boolean(data.isCorrect),
-                  pointsAdded: data.points || 0,
-                  totalScore: newScore,
-                  streak: newStreak,
-                  rank: data.rank
-                });
-                setGameState("round_reveal");
-                triggerHaptic(data.isCorrect ? [70, 50, 70] : 120);
-              }
-            }, 1200);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [isSandbox]);
-
   // Leave Game
   const leaveGame = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    sandboxTimeouts.current.forEach(clearTimeout);
+    clearAllTimers();
 
     const socket = getSocket();
     if (socket && pinRef.current) {
       socket.emit("leave_quiz_session", { pin: pinRef.current, nickname: nicknameRef.current });
     }
+
+    gameStateRef.current = "idle";
+    selectedOptionIndexRef.current = null;
+    currentQuestionRef.current = null;
+    isSandboxRef.current = false;
 
     setGameState("idle");
     setPin("");
@@ -767,90 +918,29 @@ export function useQuizSocket(): UseQuizSocketReturn {
     setTimeLeft(0);
     setError("");
     setIsSandbox(false);
-  }, []);
+  }, [clearAllTimers]);
 
-  // Sandbox demo flow for instant testing of all questions to final podium
-  useEffect(() => {
-    runSandboxQuestionRef.current = (qIndex: number, currentPoints: number, currentStreak: number) => {
-      sandboxTimeouts.current.forEach(clearTimeout);
-      sandboxTimeouts.current = [];
-
-      if (qIndex >= DEMO_QUESTIONS.length) {
-        // Game Over - Show Final Points & Podium
-        setGameOverData({
-          sessionId: "demo_session_123",
-          finalScore: currentPoints,
-          finalRank: 1,
-          totalParticipants: 24,
-          topLeaderboard: [
-            { name: nicknameRef.current || "AttendeePlayer", score: currentPoints, rank: 1 },
-            { name: "Sarah Chen", score: Math.max(600, currentPoints - 180), rank: 2 },
-            { name: "Marcus Thorne", score: Math.max(400, currentPoints - 350), rank: 3 }
-          ]
-        });
-        setGameState("game_over");
-        triggerHaptic([100, 80, 100, 80, 150]);
-        return;
-      }
-
-      const q = DEMO_QUESTIONS[qIndex];
-      setCurrentQuestion(q);
-      setStreak(currentStreak);
-      setTimeLeft(q.timeLimitSeconds);
-      setSelectedOptionIndex(null);
-      setRoundResult(null);
-      setGameState("question_active");
-      triggerHaptic([60, 40, 60]);
-
-      // If user does not answer before question timer expires
-      const autoAdvanceTimeout = setTimeout(() => {
-        if (selectedOptionIndexRef.current === null && gameStateRef.current === "question_active") {
-          const correctIndex = DEMO_CORRECT_ANSWERS[qIndex];
-          setRoundResult({
-            questionIndex: qIndex,
-            correctOptionIndex: correctIndex,
-            selectedOptionIndex: null,
-            isCorrect: false,
-            pointsAdded: 0,
-            totalScore: currentPoints,
-            streak: 0,
-            rank: 1
-          });
-          setStreak(0);
-          setGameState("round_reveal");
-          triggerHaptic(120);
-
-          // After 3.5s on round reveal, move to next question or game over
-          const nextQTimeout = setTimeout(() => {
-            runSandboxQuestionRef.current(qIndex + 1, currentPoints, 0);
-          }, 3500);
-          sandboxTimeouts.current.push(nextQTimeout);
-        }
-      }, (q.timeLimitSeconds + 0.5) * 1000);
-
-      sandboxTimeouts.current.push(autoAdvanceTimeout);
-    };
-  }, []);
-
+  // Start Sandbox Demo Mode (Full 3-Question Kahoot Progression to Podium)
   const startSandboxDemo = useCallback(() => {
+    clearAllTimers();
+
     setIsSandbox(true);
+    isSandboxRef.current = true;
     setPin("DEMO88");
     const demoNick = nickname || "AttendeePlayer";
     setNickname(demoNick);
-    setSessionData({ _id: "demo_session_123", pin: "DEMO88", status: "waiting" });
+    setSessionData({ _id: "demo_session_123", pin: "DEMO88", status: "waiting", totalQuestions: 3 });
     setGameState("lobby");
     setTotalScore(0);
     setStreak(0);
 
-    sandboxTimeouts.current.forEach(clearTimeout);
-    sandboxTimeouts.current = [];
+    // Simulate 2s in lobby then start Question 1
+    const t = setTimeout(() => {
+      advanceToQuestion(0, 0, 0);
+    }, 2000);
 
-    // Simulate 2.5 seconds in lobby then admin starts Q1
-    const t1 = setTimeout(() => {
-      runSandboxQuestionRef.current(0, 0, 0);
-    }, 2500);
-    sandboxTimeouts.current.push(t1);
-  }, [nickname]);
+    addTimeout(t);
+  }, [clearAllTimers, nickname, advanceToQuestion, addTimeout]);
 
   return {
     gameState,

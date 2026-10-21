@@ -14,7 +14,8 @@ export function InstallBanner() {
       // Check if user has already dismissed it this session
       const isDismissed = sessionStorage.getItem("pwa-banner-dismissed");
       if (!isDismissed) {
-        setShowBanner(true);
+        const timer = setTimeout(() => setShowBanner(true), 0);
+        return () => clearTimeout(timer);
       }
     }
   }, [isInstallable]);
