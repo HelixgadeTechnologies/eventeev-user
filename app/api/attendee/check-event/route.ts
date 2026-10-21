@@ -2,58 +2,231 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Attendee from "@/lib/models/Attendee";
 import Ticket from "@/lib/models/Ticket";
+import Event from "@/lib/models/Event";
 import { signToken } from "@/lib/jwt";
+import mongoose from "mongoose";
+import crypto from "crypto";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://eventeevapi.onrender.com";
 
 /**
- * GET /api/attendee/check-event?email=...&eventId=...
+ * GET /api/attendee/check-event?email=...&eventId=...&name=...
  *
- * Checks whether an attendee already has a valid or used ticket
- * for the given event. If so, returns a fresh JWT so they can
- * skip the payment flow and go straight to the dashboard.
+ * Checks whether an attendee's info is already in the database for the event.
+ * If found (in Ticket, Attendee, or upstream backend):
+ * Issues a fresh JWT token and returns isAttendee: true so the user is taken
+ * straight into the dashboard without being asked to select a ticket again.
  */
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const email = searchParams.get("email");
-    const eventId = searchParams.get("eventId");
+    const emailParam = searchParams.get("email");
+    const eventIdParam = searchParams.get("eventId");
+    const nameParam = searchParams.get("name");
 
-    if (!email || !eventId) {
+    if (!emailParam || !eventIdParam) {
       return NextResponse.json({ error: "email and eventId are required" }, { status: 400 });
     }
 
-    if (!process.env.MONGODB_URI) {
-      return NextResponse.json({ isAttendee: false });
+    const email = emailParam.toLowerCase().trim();
+    const cleanEventId = eventIdParam.trim();
+
+    // 1. Resolve event from local database or upstream API
+    let resolvedEventId = cleanEventId;
+    let eventConnectCode = cleanEventId;
+
+    if (process.env.MONGODB_URI) {
+      try {
+        await dbConnect();
+
+        let eventDoc: any = null;
+        if (mongoose.isValidObjectId(cleanEventId)) {
+          eventDoc = await Event.findById(cleanEventId);
+        }
+        if (!eventDoc) {
+          eventDoc = await Event.findOne({
+            $or: [
+              { slug: new RegExp(`^${cleanEventId}$`, "i") },
+              { connectCode: new RegExp(`^${cleanEventId}$`, "i") },
+              { title: new RegExp(`^${cleanEventId}$`, "i") },
+            ],
+          });
+        }
+
+        if (eventDoc) {
+          resolvedEventId = String(eventDoc._id);
+          eventConnectCode = eventDoc.connectCode || eventDoc.slug || cleanEventId;
+        }
+
+        // --- CHECK LOCAL DATABASE ---
+        const attendee = await Attendee.findOne({ email });
+
+        if (attendee) {
+          const attendeeId = attendee._id;
+
+          // Check A: Ticket exists for this event
+          const eventObjectId = mongoose.isValidObjectId(resolvedEventId)
+            ? new mongoose.Types.ObjectId(resolvedEventId)
+            : null;
+
+          const ticketQuery: any = {
+            attendeeId,
+            status: { $in: ["valid", "used", "pending"] },
+            $or: [
+              { eventId: resolvedEventId },
+              ...(eventObjectId ? [{ eventId: eventObjectId }] : []),
+            ],
+          };
+
+          const ticket = await Ticket.findOne(ticketQuery);
+
+          if (ticket) {
+            const token = signToken({
+              id: attendee._id.toString(),
+              email: attendee.email,
+              name: attendee.name,
+              attendee: { id: attendee._id.toString(), email: attendee.email, name: attendee.name },
+            });
+
+            return NextResponse.json({
+              isAttendee: true,
+              token,
+              eventId: resolvedEventId,
+              message: "Existing ticket found. Entering dashboard...",
+            });
+          }
+
+          // Check B: Attendee record already has eventId associated (backend schema)
+          try {
+            const attendeeWithEvent = await Attendee.findOne({
+              email,
+              status: { $ne: "cancelled" },
+              $or: [
+                { eventId: resolvedEventId },
+                ...(eventObjectId ? [{ eventId: eventObjectId }] : []),
+              ],
+            });
+
+            if (attendeeWithEvent) {
+              const token = signToken({
+                id: attendeeWithEvent._id.toString(),
+                email: attendeeWithEvent.email,
+                name: attendeeWithEvent.name,
+                attendee: {
+                  id: attendeeWithEvent._id.toString(),
+                  email: attendeeWithEvent.email,
+                  name: attendeeWithEvent.name,
+                },
+              });
+
+              return NextResponse.json({
+                isAttendee: true,
+                token,
+                eventId: resolvedEventId,
+                message: "Event registration verified. Entering dashboard...",
+              });
+            }
+          } catch (e) {}
+
+          // Check C: User info exists in database — auto-create a ticket so they never select again
+          const orderId = `ORD-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+          const newTicket = await Ticket.create({
+            attendeeId: attendee._id,
+            eventId: eventObjectId || resolvedEventId,
+            orderId,
+            tier: "General Admission",
+            status: "valid",
+          });
+
+          const token = signToken({
+            id: attendee._id.toString(),
+            email: attendee.email,
+            name: attendee.name,
+            attendee: { id: attendee._id.toString(), email: attendee.email, name: attendee.name },
+          });
+
+          return NextResponse.json({
+            isAttendee: true,
+            token,
+            eventId: resolvedEventId,
+            message: "User verified on database. Entering dashboard...",
+          });
+        }
+      } catch (dbErr) {
+        console.warn("Local DB check-event lookup failed, trying upstream API:", dbErr);
+      }
     }
 
-    await dbConnect();
+    // 2. Upstream Live Backend Check (Render API)
+    try {
+      // Upstream Check A: /api/event/connect
+      const connectRes = await fetch(`${API_BASE_URL}/api/event/connect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          connectCode: eventConnectCode,
+          email,
+        }),
+        cache: "no-store",
+      });
 
-    // Find the attendee by email
-    const attendee = await Attendee.findOne({ email: email.toLowerCase().trim() });
-    if (!attendee) {
-      return NextResponse.json({ isAttendee: false });
+      if (connectRes.ok) {
+        const connectData = await connectRes.json();
+        if (connectData.isRegistered) {
+          const attendeeId = String(connectData.attendeeId || new mongoose.Types.ObjectId().toString());
+          const token = signToken({
+            id: attendeeId,
+            email,
+            name: nameParam || "Attendee",
+            attendee: { id: attendeeId, email, name: nameParam || "Attendee" },
+          });
+
+          return NextResponse.json({
+            isAttendee: true,
+            token,
+            eventId: String(connectData.eventId || resolvedEventId),
+            message: "Upstream registration verified. Entering dashboard...",
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Upstream /api/event/connect check failed:", e);
     }
 
-    // Check if they have a non-cancelled ticket for this event
-    const ticket = await Ticket.findOne({
-      attendeeId: attendee._id,
-      eventId,
-      status: { $in: ["valid", "used", "pending"] },
-    });
+    try {
+      // Upstream Check B: Check networking attendee directory
+      const netRes = await fetch(`${API_BASE_URL}/api/networking/attendees/${resolvedEventId}`, {
+        cache: "no-store",
+      });
+      if (netRes.ok) {
+        const netData = await netRes.json();
+        const list = Array.isArray(netData) ? netData : (netData.attendees || []);
+        const found = list.find((a: any) => a.email && a.email.toLowerCase().trim() === email);
+        if (found) {
+          const attendeeId = String(found._id || found.id || new mongoose.Types.ObjectId().toString());
+          const token = signToken({
+            id: attendeeId,
+            email,
+            name: found.name || nameParam || "Attendee",
+            attendee: { id: attendeeId, email, name: found.name || nameParam || "Attendee" },
+          });
 
-    if (!ticket) {
-      return NextResponse.json({ isAttendee: false });
+          return NextResponse.json({
+            isAttendee: true,
+            token,
+            eventId: resolvedEventId,
+            message: "User found in attendee directory. Entering dashboard...",
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Upstream networking attendees check failed:", e);
     }
 
-    // Already registered — issue a fresh token and let them in
-    const token = signToken({ id: attendee._id.toString(), email: attendee.email });
-
-    return NextResponse.json({
-      isAttendee: true,
-      token,
-      eventId: ticket.eventId.toString(),
-    });
+    // If not found in any database record
+    return NextResponse.json({ isAttendee: false });
   } catch (error) {
     console.error("Check-event Error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ isAttendee: false });
   }
 }

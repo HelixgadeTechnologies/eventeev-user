@@ -36,6 +36,38 @@ export default function JoinPage() {
       
       if (response.ok && eventData) {
         setEventDetails(eventData);
+
+        // If the user already has a token in localStorage, check if they are already in the database for this event
+        const existingToken = localStorage.getItem("token");
+        if (existingToken) {
+          try {
+            const meRes = await fetch("/api/attendee/me", {
+              headers: { Authorization: `Bearer ${existingToken}` },
+            });
+            if (meRes.ok) {
+              const meData = await meRes.json();
+              const userEmail = meData?.user?.email;
+              if (userEmail) {
+                const actualEvId = eventData._id || eventData.id || code;
+                const checkRes = await fetch(
+                  `/api/attendee/check-event?email=${encodeURIComponent(userEmail)}&eventId=${encodeURIComponent(actualEvId)}`
+                );
+                if (checkRes.ok) {
+                  const checkData = await checkRes.json();
+                  if (checkData.isAttendee) {
+                    if (checkData.token) localStorage.setItem("token", checkData.token);
+                    localStorage.setItem("eventId", checkData.eventId || actualEvId);
+                    router.push("/dashboard");
+                    return;
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            // Proceed to Step 2 normally
+          }
+        }
+
         setStep(2);
       } else {
         setError(data.message || data.error || "Event not found. Please check the ID.");
@@ -54,7 +86,23 @@ export default function JoinPage() {
     
     setLoading(true);
     try {
-      // Step 1: Authenticate / create attendee record
+      const actualEventId = eventDetails?._id || eventDetails?.id || code;
+
+      // Check if this attendee's info is already in the database
+      const checkRes = await fetch(
+        `/api/attendee/check-event?email=${encodeURIComponent(email)}&eventId=${encodeURIComponent(actualEventId)}&name=${encodeURIComponent(fullName)}`
+      );
+      const checkData = await checkRes.json().catch(() => ({}));
+
+      if (checkRes.ok && checkData.isAttendee) {
+        // User info already in database — skip ticket selection and enter dashboard directly
+        if (checkData.token) localStorage.setItem("token", checkData.token);
+        localStorage.setItem("eventId", checkData.eventId || actualEventId);
+        router.push("/dashboard");
+        return;
+      }
+
+      // Step 1: Authenticate / create attendee record for new users
       const authResponse = await fetch("/api/attendee/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -69,20 +117,6 @@ export default function JoinPage() {
         return;
       }
 
-      // Step 2: Check if this attendee already has a ticket for this event
-      const actualEventId = eventDetails?._id || eventDetails?.id || code;
-      const checkRes = await fetch(
-        `/api/attendee/check-event?email=${encodeURIComponent(email)}&eventId=${encodeURIComponent(actualEventId)}`
-      );
-      const checkData = await checkRes.json();
-
-      if (checkRes.ok && checkData.isAttendee) {
-        // Already registered — skip payment and go straight to dashboard
-        localStorage.setItem("token", checkData.token);
-        localStorage.setItem("eventId", checkData.eventId || actualEventId);
-        router.push("/dashboard");
-        return;
-      }
 
       // Step 3: Not yet registered — fetch available ticket tiers
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://eventeevapi.onrender.com';
