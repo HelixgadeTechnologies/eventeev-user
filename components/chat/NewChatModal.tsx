@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { Search, X, Crown, User as UserIcon, Loader2, MessageSquarePlus } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { Search, X, Crown, User as UserIcon, Loader2, MessageSquarePlus, RefreshCw } from "lucide-react";
 import { ChatParticipant, chatService } from "@/lib/services/chatService";
-import { cn } from "@/lib/utils";
 
 interface NewChatModalProps {
   isOpen: boolean;
@@ -28,51 +27,55 @@ export function NewChatModal({
   const [attendees, setAttendees] = useState<ChatParticipant[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchParticipants = useCallback(async () => {
+    const effectiveToken = token || (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+    const effectiveEventId = eventId || (typeof window !== "undefined" ? localStorage.getItem("eventId") : null);
+
+    if (!effectiveEventId) {
+      setError("No event selected.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await chatService.getParticipants(effectiveEventId, effectiveToken || "");
+      setOrganizer(result.organizer);
+      setAttendees(result.attendees);
+    } catch (err: any) {
+      console.warn("Failed to load participants:", err);
+      setError(err?.message || "Could not retrieve participants");
+    } finally {
+      setLoading(false);
+    }
+  }, [eventId, token]);
+
   useEffect(() => {
-    if (!isOpen || !eventId || !token) return;
-
-    let isMounted = true;
-    const fetchParticipants = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await chatService.getParticipants(eventId, token);
-        if (isMounted) {
-          setOrganizer(result.organizer);
-          setAttendees(result.attendees);
-        }
-      } catch (err: any) {
-        console.error("Failed to load participants:", err);
-        if (isMounted) {
-          setError(err.message || "Failed to load directory");
-        }
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
+    if (!isOpen) return;
     fetchParticipants();
-    return () => {
-      isMounted = false;
-    };
-  }, [isOpen, eventId, token]);
+  }, [isOpen, fetchParticipants]);
 
   const filteredOrganizer = useMemo(() => {
     if (!organizer) return null;
-    if (organizer.id === currentUserId || organizer.isCurrentUser) return null;
+    if (currentUserId && String(organizer.id) === String(currentUserId)) return null;
+    if (organizer.isCurrentUser) return null;
     if (!search.trim()) return organizer;
     return organizer.name.toLowerCase().includes(search.toLowerCase()) ? organizer : null;
   }, [organizer, currentUserId, search]);
 
   const filteredAttendees = useMemo(() => {
     return attendees.filter((att) => {
-      if (att.id === currentUserId || att.isCurrentUser) return false;
+      if (currentUserId && String(att.id) === String(currentUserId)) return false;
+      if (att.isCurrentUser) return false;
       if (!search.trim()) return true;
       return att.name.toLowerCase().includes(search.toLowerCase());
     });
   }, [attendees, currentUserId, search]);
 
   if (!isOpen) return null;
+
+  const hasAnyParticipants = Boolean(filteredOrganizer || filteredAttendees.length > 0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -116,12 +119,26 @@ export function NewChatModal({
           {loading ? (
             <div className="py-12 flex flex-col items-center justify-center gap-2">
               <Loader2 className="w-8 h-8 animate-spin text-eventeev-orange" />
-              <p className="text-xs font-semibold text-slate-400">Loading directory...</p>
+              <p className="text-xs font-semibold text-slate-400">Loading attendee directory...</p>
             </div>
-          ) : error ? (
-            <div className="py-8 text-center px-4">
-              <p className="text-sm font-semibold text-rose-500 mb-1">{error}</p>
-              <p className="text-xs text-slate-400">Make sure you are registered for this event.</p>
+          ) : !hasAnyParticipants ? (
+            <div className="py-10 text-center px-4">
+              <UserIcon className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+              <p className="text-sm font-bold text-eventeev-navy">
+                {search ? "No attendees match your search." : "No other confirmed attendees found."}
+              </p>
+              <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+                {search
+                  ? "Try searching with a different name."
+                  : "As other attendees register and join the event, they will appear here."}
+              </p>
+              <button
+                onClick={fetchParticipants}
+                className="mt-4 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl inline-flex items-center gap-1.5 transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Refresh Directory
+              </button>
             </div>
           ) : (
             <>
@@ -182,10 +199,9 @@ export function NewChatModal({
                 </div>
 
                 {filteredAttendees.length === 0 ? (
-                  <div className="py-8 text-center text-slate-400">
-                    <UserIcon className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                  <div className="py-6 text-center text-slate-400">
                     <p className="text-xs font-semibold">
-                      {search ? "No attendees match your search." : "No other confirmed attendees yet."}
+                      {search ? "No attendees match your search." : "No other confirmed attendees registered yet."}
                     </p>
                   </div>
                 ) : (

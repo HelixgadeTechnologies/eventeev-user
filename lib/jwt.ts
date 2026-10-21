@@ -5,7 +5,13 @@ function getJwtSecret(): string {
 }
 
 export function signToken(payload: any, expiresIn: SignOptions['expiresIn'] = '7d') {
-  return jwt.sign(payload, getJwtSecret(), { expiresIn });
+  const normalizedPayload = {
+    ...payload,
+    ...(payload && payload.id && !payload.attendee
+      ? { attendee: { id: payload.id, email: payload.email, name: payload.name } }
+      : {}),
+  };
+  return jwt.sign(normalizedPayload, getJwtSecret(), { expiresIn });
 }
 
 export function verifyToken(token: string) {
@@ -15,3 +21,4 @@ export function verifyToken(token: string) {
     return null;
   }
 }
+
