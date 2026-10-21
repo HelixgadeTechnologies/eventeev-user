@@ -417,16 +417,17 @@ export function useQuizSocket(): UseQuizSocketReturn {
     if (gameState !== "lobby" || !sessionData || isSandbox) return;
 
     const currentPin = pin || sessionData?.pin;
-    const sessionId = sessionData?._id || sessionData?.sessionId || sessionData?.id;
     const currentNick = nickname;
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://eventeevapi.onrender.com";
 
     let isSubscribed = true;
 
     const verifyLobbyState = async () => {
+      if (!currentPin) return;
+
       try {
-        // Try dedicated status endpoint first
-        let res = await fetch(`${API_URL}/api/game/quiz/session/${sessionId}/status`, {
+        // 1. Direct session status endpoint from backend: GET /api/game/quiz/session/:pin
+        let res = await fetch(`${API_URL}/api/game/quiz/session/${encodeURIComponent(currentPin)}`, {
           headers: { "Cache-Control": "no-cache" }
         }).catch(() => null);
 
@@ -448,10 +449,10 @@ export function useQuizSocket(): UseQuizSocketReturn {
 
         if (!isSubscribed || !data) return;
 
-        // Check if admin has started
+        // Check if admin has started the game (backend sets status: 'active')
         const isLive =
-          data.status === "in_progress" ||
           data.status === "active" ||
+          data.status === "in_progress" ||
           data.status === "started" ||
           Boolean(data.currentQuestion);
 
@@ -506,8 +507,8 @@ export function useQuizSocket(): UseQuizSocketReturn {
 
         // Always check if the game is ALREADY in progress or started by the admin
         const isAlreadyLive =
-          data.status === "in_progress" ||
           data.status === "active" ||
+          data.status === "in_progress" ||
           data.status === "started" ||
           Boolean(data.currentQuestion);
 
@@ -542,23 +543,50 @@ export function useQuizSocket(): UseQuizSocketReturn {
       return;
     }
 
-    // Emit answer via socket
-    const socket = getSocket();
     const currentPin = pinRef.current;
     const currentSession = sessionDataRef.current;
     const activeQ = currentQuestionRef.current;
     const remaining = timeLeftRef.current;
     const playerNick = nicknameRef.current;
+    const timeTaken = Math.max(0, (activeQ?.timeLimitSeconds ?? 20) - remaining);
 
+    // 1. Emit via real-time WebSocket
+    const socket = getSocket();
     if (socket && currentSession) {
       socket.emit("submit_quiz_answer", {
         pin: currentPin,
         sessionId: currentSession._id || currentSession.sessionId,
         questionIndex: activeQ?.questionIndex ?? 0,
         selectedOptionIndex: optionIndex,
-        timeElapsedSeconds: (activeQ?.timeLimitSeconds ?? 15) - remaining,
+        timeElapsedSeconds: timeTaken,
         nickname: playerNick
       });
+    }
+
+    // 2. Submit to backend REST endpoint for Kahoot scoring evaluation: PATCH /api/game/quiz/session/:pin/submit
+    if (currentPin) {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://eventeevapi.onrender.com";
+      fetch(`${API_URL}/api/game/quiz/session/${encodeURIComponent(currentPin)}/submit`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nickname: playerNick,
+          questionIndex: activeQ?.questionIndex ?? 0,
+          answer: [optionIndex],
+          answerIndex: optionIndex,
+          timeTaken
+        })
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && typeof data.currentScore === "number") {
+            setTotalScore(data.currentScore);
+            if (typeof data.streak === "number") setStreak(data.streak);
+          }
+        })
+        .catch(() => {
+          // Fallback to socket reveal if network patch drops
+        });
     }
   }, [isSandbox]);
 
