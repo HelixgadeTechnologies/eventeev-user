@@ -4,11 +4,19 @@ const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL || "https://eventeevapi.onren
 
 let socket: Socket | null = null;
 
-export const initSocket = () => {
+export const initSocket = (token?: string | null) => {
+  const authToken = token || (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+
   if (!socket) {
     socket = io(SOCKET_URL, {
       transports: ["websocket", "polling"],
+      auth: authToken ? { token: authToken } : undefined,
     });
+  } else if (authToken && (!socket.auth || (socket.auth as any).token !== authToken)) {
+    socket.auth = { token: authToken };
+    if (!socket.connected) {
+      socket.connect();
+    }
   }
   return socket;
 };
@@ -26,3 +34,4 @@ export const disconnectSocket = () => {
     socket = null;
   }
 };
+
