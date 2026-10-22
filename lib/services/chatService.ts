@@ -279,9 +279,11 @@ export const chatService = {
     targetParticipantId: string,
     currentUserId: string,
     token: string,
-    targetParticipant?: ChatParticipant
+    targetParticipant?: ChatParticipant,
+    currentUserName?: string,
+    currentUserAvatar?: string
   ): Promise<ChatRoom> {
-    const pIds = [currentUserId, targetParticipantId].filter(Boolean);
+    const pIds = [String(currentUserId), String(targetParticipantId)].filter(Boolean);
     const body: Record<string, any> = {
       event: eventId,
       eventId: eventId,
@@ -291,17 +293,37 @@ export const chatService = {
       participantIds: pIds,
     };
 
-    if (targetParticipant) {
-      body.participants = [
-        {
-          id: targetParticipant.id,
-          name: targetParticipant.name,
-          avatar: targetParticipant.avatar || null,
-          role: targetParticipant.role === "organizer" ? "admin" : "attendee",
-          modelType: targetParticipant.modelType || "Attendee",
-        },
-      ];
+    const participantsList: any[] = [];
+    if (currentUserId) {
+      participantsList.push({
+        id: String(currentUserId),
+        name: currentUserName || "Attendee",
+        avatar: currentUserAvatar || null,
+        role: "attendee",
+        modelType: "Attendee",
+      });
     }
+
+    if (targetParticipant) {
+      const isTargetOrganizer =
+        targetParticipant.role === "organizer" ||
+        targetParticipant.role === "admin" ||
+        targetParticipant.modelType === "User";
+
+      participantsList.push({
+        id: String(targetParticipant.id),
+        name: targetParticipant.name,
+        avatar: targetParticipant.avatar || null,
+        role: isTargetOrganizer ? "admin" : "attendee",
+        modelType: targetParticipant.modelType || (isTargetOrganizer ? "User" : "Attendee"),
+      });
+
+      if (isTargetOrganizer) {
+        body.leadParticipant = targetParticipant.id;
+      }
+    }
+
+    body.participants = participantsList;
 
     const res = await fetch(`${API_BASE_URL}/api/chat/room`, {
       method: "POST",
