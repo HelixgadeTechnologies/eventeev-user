@@ -206,6 +206,23 @@ export async function GET(req: NextRequest) {
 
     // 2. Upstream Live Backend Check (Render API)
     try {
+      // If eventConnectCode looks like an ObjectId or matches cleanEventId, resolve actual connectCode
+      if (cleanEventId) {
+        try {
+          const evPubRes = await fetch(`${API_BASE_URL}/api/event/public/${encodeURIComponent(cleanEventId)}`, {
+            cache: "no-store",
+          });
+          if (evPubRes.ok) {
+            const evPubData = await evPubRes.json();
+            const evObj = evPubData.event || evPubData;
+            if (evObj?.connectCode) {
+              eventConnectCode = evObj.connectCode;
+              resolvedEventId = String(evObj._id || resolvedEventId);
+            }
+          }
+        } catch (_) {}
+      }
+
       // Upstream Check A: /api/event/connect
       const connectRes = await fetch(`${API_BASE_URL}/api/event/connect`, {
         method: "POST",
