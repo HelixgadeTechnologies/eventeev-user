@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Attendee from "@/lib/models/Attendee";
+import Ticket from "@/lib/models/Ticket";
 import { verifyToken } from "@/lib/jwt";
 
 export async function GET(req: NextRequest) {
@@ -23,9 +24,12 @@ export async function GET(req: NextRequest) {
     if (process.env.MONGODB_URI) {
       try {
         await dbConnect();
-        const attendee = await Attendee.findById(attendeeId).select("-__v");
+        const attendee = await Attendee.findById(attendeeId).select("-__v").lean();
         if (attendee) {
-          return NextResponse.json({ user: attendee });
+          const ticket = await Ticket.findOne({ attendeeId: attendee._id })
+            .sort({ createdAt: -1 })
+            .lean();
+          return NextResponse.json({ user: attendee, ticket: ticket || null });
         }
       } catch (dbErr) {
         console.warn("Local DB lookup failed for /api/attendee/me:", dbErr);

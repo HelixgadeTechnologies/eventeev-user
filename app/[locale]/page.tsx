@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "@/i18n/routing";
 import { motion, AnimatePresence } from "framer-motion";
-import { QrCode, ArrowRight, ShieldCheck, Mail, User, Calendar, MapPin, X, FileText } from "lucide-react";
+import { QrCode, ArrowRight, ShieldCheck, Mail, User, Calendar, MapPin, X, FileText, Ticket, LogIn, Sparkles, LogOut, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function JoinPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [authMode, setAuthMode] = useState<"join" | "signin">("join");
   const [code, setCode] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -20,7 +21,104 @@ export default function JoinPage() {
   const [error, setError] = useState<string | null>(null);
   const [showQrModal, setShowQrModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
+  
+  // Returning attendee state
+  const [existingSession, setExistingSession] = useState<{ user: any; event?: any; ticket?: any } | null>(null);
+  const [loginIdentifier, setLoginIdentifier] = useState("");
+  const [loginEventCode, setLoginEventCode] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  
   const router = useRouter();
+
+  // On mount: check if attendee already has an active session
+  useEffect(() => {
+    const checkActiveSession = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const storedEventId = localStorage.getItem("eventId");
+        if (!token) return;
+
+        const res = await fetch("/api/attendee/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const user = data.user || data.attendee;
+          if (user && (user.email || user.name)) {
+            let eventInfo = null;
+            if (storedEventId) {
+              try {
+                const evRes = await fetch(`/api/event/public/${storedEventId}`);
+                if (evRes.ok) {
+                  const evData = await evRes.json();
+                  eventInfo = evData.event || (evData._id ? evData : null);
+                }
+              } catch (e) {}
+            }
+            setExistingSession({ user, event: eventInfo, ticket: data.ticket || null });
+          }
+        }
+      } catch (e) {
+        console.warn("Could not verify active session:", e);
+      }
+    };
+
+    checkActiveSession();
+  }, []);
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanId = loginIdentifier.trim();
+    if (!cleanId) return;
+
+    setLoginLoading(true);
+    try {
+      const isEmail = cleanId.includes("@");
+      const payload: any = {};
+      if (isEmail) {
+        payload.email = cleanId;
+      } else {
+        payload.orderId = cleanId;
+      }
+
+      const cleanEvCode = (loginEventCode || code).trim();
+      if (cleanEvCode) {
+        payload.eventId = cleanEvCode;
+      }
+
+      const res = await fetch("/api/attendee/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success && data.token) {
+        localStorage.setItem("token", data.token);
+        if (data.eventId) {
+          localStorage.setItem("eventId", data.eventId);
+        }
+
+        router.push(
+          `/auth/handoff?token=${encodeURIComponent(data.token)}&eventId=${encodeURIComponent(
+            data.eventId || ""
+          )}&orderId=${encodeURIComponent(data.ticket?.orderId || "")}&welcome=true`
+        );
+      } else {
+        setError(
+          data.error ||
+            "No active ticket or attendee registration found with that email or reference. Please double-check your code or register for the event."
+        );
+      }
+    } catch (err) {
+      console.error("Login submission error:", err);
+      setError("Failed to sign in. Please check your internet connection and try again.");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
 
   const handleNextStep = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -247,22 +345,120 @@ export default function JoinPage() {
         transition={{ duration: 0.6 }}
         className="w-full max-w-sm mb-24"
       >
-        <div className="mb-12">
+        <div className="mb-8">
           <div className="flex items-center justify-center mx-auto mb-6">
             <Image src="/icons/eventeev-logo.png" alt="Eventeev Logo" width={200} height={60} className="object-contain" priority style={{ width: 'auto', height: 'auto' }} />
           </div>
-          <p className="text-eventeev-slate text-lg font-medium">
-            {step === 1 && "Enter your Event ID to join the ecosystem."}
+          <p className="text-eventeev-slate text-base sm:text-lg font-medium">
+            {step === 1 && (authMode === "join" ? "Enter your Event ID to join the ecosystem." : "Sign in to access your digital pass & progress.")}
             {step === 2 && "Provide your details to continue."}
             {step === 3 && "Select a ticket to complete your registration."}
           </p>
         </div>
 
+        {/* Existing Session Auto-Resume Banner */}
+        {step === 1 && existingSession && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mb-8 p-5 rounded-3xl bg-gradient-to-br from-orange-50 via-white to-amber-50 border-2 border-orange-200/90 shadow-lg shadow-orange-500/10 text-left relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 transform translate-x-2 -translate-y-2 w-20 h-20 bg-orange-400/10 rounded-full blur-xl pointer-events-none" />
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-eventeev-orange to-orange-600 text-white font-black text-lg flex items-center justify-center shadow-md shadow-orange-500/30 flex-shrink-0">
+                {existingSession.user?.name ? existingSession.user.name.charAt(0).toUpperCase() : "A"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-eventeev-orange">
+                    Active Pass Detected
+                  </span>
+                </div>
+                <h4 className="text-base font-black text-eventeev-navy truncate leading-tight">
+                  {existingSession.user?.name || "Welcome Back!"}
+                </h4>
+                <p className="text-xs text-slate-500 font-medium truncate">
+                  {existingSession.user?.email}
+                </p>
+              </div>
+            </div>
+
+            {existingSession.event && (
+              <div className="mb-4 px-3 py-2 bg-white/90 rounded-xl border border-orange-100 flex items-center gap-2 text-xs text-slate-700 font-semibold shadow-xs">
+                <Calendar className="w-3.5 h-3.5 text-eventeev-orange flex-shrink-0" />
+                <span className="truncate">{existingSession.event.title || "Your Event"}</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard")}
+                className="flex-1 py-3 px-4 bg-eventeev-orange hover:bg-orange-600 active:scale-[0.98] text-white font-black text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 transition-all cursor-pointer"
+              >
+                <span>Resume Journey</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.removeItem("token");
+                  localStorage.removeItem("eventId");
+                  setExistingSession(null);
+                }}
+                className="py-3 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                title="Switch Account"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Switch</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Step 1 Mode Toggle */}
+        {step === 1 && (
+          <div className="mb-6 p-1 bg-slate-100 rounded-2xl flex items-center gap-1 border border-slate-200/80">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("join");
+                setError(null);
+              }}
+              className={cn(
+                "flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer",
+                authMode === "join"
+                  ? "bg-white text-eventeev-navy shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              )}
+            >
+              Join / Register
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("signin");
+                setError(null);
+              }}
+              className={cn(
+                "flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer flex items-center justify-center gap-1.5",
+                authMode === "signin"
+                  ? "bg-white text-eventeev-orange shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              )}
+            >
+              <Ticket className="w-3.5 h-3.5" />
+              Already Have a Ticket?
+            </button>
+          </div>
+        )}
+
         <div className="relative min-h-[200px]">
           <AnimatePresence mode="wait">
-            {step === 1 && (
+            {step === 1 && authMode === "join" && (
               <motion.form
-                key="step1"
+                key="step1-join"
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
@@ -295,6 +491,67 @@ export default function JoinPage() {
                   ) : (
                     <>
                       Continue
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                  )}
+                </button>
+              </motion.form>
+            )}
+
+            {step === 1 && authMode === "signin" && (
+              <motion.form
+                key="step1-signin"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.3 }}
+                onSubmit={handleLoginSubmit}
+                className="space-y-4 w-full text-left"
+              >
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={loginIdentifier}
+                      onChange={(e) => setLoginIdentifier(e.target.value)}
+                      placeholder="Email or Ticket Ref (ORD-XXXXXX)"
+                      className="w-full h-14 pl-12 pr-6 bg-slate-50 border-2 border-slate-100 rounded-xl text-base font-semibold text-eventeev-navy focus:border-eventeev-orange focus:bg-white focus:outline-none transition-all duration-300 placeholder:text-slate-300 placeholder:font-normal"
+                      required
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <Ticket className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={loginEventCode}
+                      onChange={(e) => setLoginEventCode(e.target.value)}
+                      placeholder="Event ID or Slug (Optional)"
+                      className="w-full h-14 pl-12 pr-6 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-semibold text-eventeev-navy focus:border-eventeev-orange focus:bg-white focus:outline-none transition-all duration-300 placeholder:text-slate-300 placeholder:font-normal"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-400 font-medium px-1 leading-relaxed">
+                  Enter the email address you used to register or your 6-character order code from your receipt.
+                </p>
+
+                <button
+                  type="submit"
+                  disabled={!loginIdentifier.trim() || loginLoading}
+                  className={cn(
+                    "w-full h-16 mt-2 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all duration-300 shadow-xl",
+                    loginIdentifier.trim() && !loginLoading
+                      ? "bg-eventeev-orange text-white hover:scale-[1.02] active:scale-[0.98]"
+                      : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  )}
+                >
+                  {loginLoading ? (
+                    <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      Sign In & Access Pass
                       <ArrowRight className="w-5 h-5" />
                     </>
                   )}

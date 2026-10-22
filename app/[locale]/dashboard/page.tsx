@@ -2,7 +2,29 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Calendar, MapPin, Bell, Trophy, Zap, ArrowRight, FileText, Download, Link as LinkIcon, Loader2, X, CheckCircle2, Crown, MessageSquare } from "lucide-react";
+import { 
+  Calendar, 
+  MapPin, 
+  Bell, 
+  Trophy, 
+  Zap, 
+  ArrowRight, 
+  FileText, 
+  Download, 
+  Link as LinkIcon, 
+  Loader2, 
+  X, 
+  CheckCircle2, 
+  Crown, 
+  MessageSquare,
+  Ticket,
+  QrCode,
+  Clock,
+  Users,
+  Sparkles,
+  ExternalLink,
+  ShieldCheck
+} from "lucide-react";
 import Link from "next/link";
 import { MOCK_EVENT } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -13,33 +35,50 @@ export default function DashboardPage() {
   const c = useTranslations('Common');
   
   const [eventData, setEventData] = useState<any>(null);
+  const [attendeeData, setAttendeeData] = useState<any>(null);
+  const [ticketData, setTicketData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showPassModal, setShowPassModal] = useState(false);
 
   useEffect(() => {
-    const fetchEvent = async () => {
+    const fetchDashboardData = async () => {
       try {
         const storedEventId = localStorage.getItem("eventId");
-        if (!storedEventId) {
-          setLoading(false);
-          return;
+        const token = localStorage.getItem("token");
+
+        // Fetch attendee & ticket details
+        if (token) {
+          try {
+            const meRes = await fetch("/api/attendee/me", {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (meRes.ok) {
+              const meData = await meRes.json();
+              setAttendeeData(meData.user || meData.attendee);
+              setTicketData(meData.ticket || null);
+            }
+          } catch (e) {
+            console.warn("Could not fetch attendee details:", e);
+          }
         }
 
-        const response = await fetch(`/api/event/public/${storedEventId}`);
-        const data = await response.json();
-        
-        const eventInfo = data.event || data;
-        if (response.ok && eventInfo) {
-          setEventData(eventInfo);
+        if (storedEventId) {
+          const response = await fetch(`/api/event/public/${storedEventId}`);
+          const data = await response.json();
+          const eventInfo = data.event || (data._id ? data : null);
+          if (response.ok && eventInfo) {
+            setEventData(eventInfo);
+          }
         }
       } catch (error) {
-        console.error("Failed to fetch event data:", error);
+        console.error("Failed to fetch dashboard data:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchEvent();
+    fetchDashboardData();
   }, []);
 
   if (loading) {
@@ -56,6 +95,57 @@ export default function DashboardPage() {
     eventData?.owner?.orgName ||
     eventData?.organizer?.name ||
     "Event Organizer";
+
+  const isCheckedIn = Boolean(attendeeData?.isCheckedIn || ticketData?.isCheckedIn);
+  const ticketOrderId =
+    ticketData?.orderId ||
+    (attendeeData?._id ? `ORD-${attendeeData._id.slice(-6).toUpperCase()}` : "ORD-PASS");
+  const ticketTier = ticketData?.tier || "General Admission";
+  const pulseScore = attendeeData?.points ?? 450;
+  const attendeeRank = attendeeData?.rank ? `#${attendeeData.rank}` : "#12";
+  const attendeeName = attendeeData?.name || "Attendee";
+
+  const milestones = [
+    {
+      id: "ticket",
+      title: "Ticket Confirmed",
+      subtitle: `${ticketTier} • ${ticketOrderId}`,
+      status: "completed" as const,
+      icon: Ticket,
+      actionText: "View Pass",
+      onAction: () => setShowPassModal(true),
+    },
+    {
+      id: "checkin",
+      title: "Venue Check-In",
+      subtitle: isCheckedIn ? "Checked in at Venue" : "Show QR badge at entrance",
+      status: (isCheckedIn ? "completed" : "pending") as "completed" | "pending",
+      icon: QrCode,
+      actionText: isCheckedIn ? "Verified ✓" : "Show Badge",
+      onAction: () => setShowPassModal(true),
+    },
+    {
+      id: "trivia",
+      title: "Pulse & Trivia",
+      subtitle: `${pulseScore} pts earned (${attendeeRank})`,
+      status: (pulseScore > 0 ? "completed" : "pending") as "completed" | "pending",
+      icon: Zap,
+      actionText: "Play Now",
+      href: "/dashboard/games",
+    },
+    {
+      id: "networking",
+      title: "Attendee Network",
+      subtitle: "Discover checked-in peers",
+      status: "completed" as const,
+      icon: Users,
+      actionText: "Connect",
+      href: "/dashboard/networking",
+    },
+  ];
+
+  const completedCount = milestones.filter((m) => m.status === "completed").length;
+  const progressPercent = Math.round((completedCount / milestones.length) * 100);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -99,6 +189,136 @@ export default function DashboardPage() {
       </div>
 
       <div className="px-6 py-8 space-y-8">
+        {/* Attendee Event Journey & Progress Hub */}
+        <div className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-100">
+            <div>
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-orange-100 text-eventeev-orange">
+                  <Sparkles className="w-3 h-3" />
+                  Your Event Journey
+                </span>
+                <span className="font-mono text-xs font-black bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full border border-slate-200">
+                  {ticketOrderId}
+                </span>
+              </div>
+              <h2 className="text-2xl font-black text-eventeev-navy">
+                Welcome, {attendeeName}!
+              </h2>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {isCheckedIn ? (
+                <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-black shadow-xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  Checked In at Venue
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowPassModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-full text-xs font-black transition-colors cursor-pointer shadow-xs"
+                >
+                  <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
+                  Check-in Pending • Show QR
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Progress Bar & Milestone Counter */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs font-black">
+              <span className="text-slate-500 uppercase tracking-wider">
+                Event Progress: {completedCount} of {milestones.length} Milestones Completed
+              </span>
+              <span className="text-eventeev-orange font-black text-sm">{progressPercent}%</span>
+            </div>
+            <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/60">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${progressPercent}%` }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+                className="h-full bg-gradient-to-r from-eventeev-orange via-amber-500 to-orange-500 rounded-full"
+              />
+            </div>
+          </div>
+
+          {/* Interactive Milestone Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 pt-1">
+            {milestones.map((milestone) => {
+              const Icon = milestone.icon;
+              const isDone = milestone.status === "completed";
+              return (
+                <div
+                  key={milestone.id}
+                  className={cn(
+                    "p-4 rounded-2xl border transition-all flex flex-col justify-between text-left",
+                    isDone
+                      ? "bg-slate-50/70 border-slate-200/80 hover:bg-white hover:shadow-md"
+                      : "bg-amber-50/40 border-amber-200/80 hover:bg-white hover:shadow-md"
+                  )}
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div
+                        className={cn(
+                          "w-10 h-10 rounded-xl flex items-center justify-center font-bold",
+                          isDone
+                            ? "bg-white text-eventeev-navy shadow-xs border border-slate-100"
+                            : "bg-amber-100 text-amber-800"
+                        )}
+                      >
+                        <Icon className="w-5 h-5 text-eventeev-orange" />
+                      </div>
+                      {isDone ? (
+                        <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        </span>
+                      ) : (
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping mt-1 mr-1" />
+                      )}
+                    </div>
+
+                    <h4 className="text-sm font-black text-eventeev-navy leading-tight">
+                      {milestone.title}
+                    </h4>
+                    <p className="text-xs text-slate-500 font-medium truncate mt-1">
+                      {milestone.subtitle}
+                    </p>
+                  </div>
+
+                  <div className="mt-4">
+                    {milestone.href ? (
+                      <Link
+                        href={milestone.href}
+                        className="w-full py-2 px-3 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 hover:text-eventeev-orange rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                      >
+                        <span>{milestone.actionText}</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={milestone.onAction}
+                        className={cn(
+                          "w-full py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs",
+                          isDone
+                            ? "bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 hover:text-eventeev-orange"
+                            : "bg-eventeev-orange hover:bg-orange-600 text-white"
+                        )}
+                      >
+                        <span>{milestone.actionText}</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Organizer / Event Host Quick Contact Banner */}
         <Link
           href="/dashboard/chat?chatWith=organizer"
@@ -364,6 +584,80 @@ export default function DashboardPage() {
               >
                 Close
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Digital Ticket Pass Modal */}
+      <AnimatePresence>
+        {showPassModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm overflow-hidden text-center relative border border-slate-100 p-6"
+            >
+              <button
+                type="button"
+                onClick={() => setShowPassModal(false)}
+                className="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="w-14 h-14 rounded-2xl bg-orange-100 text-eventeev-orange mx-auto flex items-center justify-center mb-4 shadow-sm">
+                <Ticket className="w-7 h-7" />
+              </div>
+
+              <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-orange-100 text-eventeev-orange inline-block mb-2">
+                {ticketTier}
+              </span>
+
+              <h3 className="text-xl font-black text-eventeev-navy">
+                {eventData?.title || "Event Pass"}
+              </h3>
+              <p className="text-xs text-slate-500 font-medium mt-1">
+                {attendeeName} • {attendeeData?.email || "Attendee"}
+              </p>
+
+              {/* Scannable Pass Box */}
+              <div className="my-5 p-4 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-3">
+                <div className="w-36 h-36 bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center relative">
+                  <QrCode className="w-full h-full text-eventeev-navy" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                    Order Reference
+                  </span>
+                  <span className="font-mono text-base font-black text-eventeev-navy tracking-wider">
+                    {ticketOrderId}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Link
+                  href={`/auth/handoff?welcome=false&orderId=${encodeURIComponent(ticketOrderId)}`}
+                  className="w-full py-3 bg-eventeev-orange hover:bg-orange-600 active:scale-[0.98] text-white rounded-xl font-black text-sm flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 transition-all cursor-pointer"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Open Full Digital Badge
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setShowPassModal(false)}
+                  className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
