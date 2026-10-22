@@ -35,10 +35,14 @@ export default function PaymentVerifyPage() {
             localStorage.setItem("eventId", data.eventId.toString());
           }
           
-          // Auto redirect to event dashboard after short delay
+          // Auto redirect to ticket handoff pass activation screen
           setTimeout(() => {
-            router.push("/dashboard");
-          }, 1500);
+            router.push(
+              `/auth/handoff?token=${encodeURIComponent(data.token || "")}&eventId=${encodeURIComponent(
+                data.eventId ? data.eventId.toString() : ""
+              )}&ticketRef=${encodeURIComponent(reference)}&welcome=true`
+            );
+          }, 1200);
         } else {
           setStatus("error");
           setErrorMessage(data.error || "Payment verification failed.");

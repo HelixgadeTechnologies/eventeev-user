@@ -9,7 +9,11 @@ import { cn } from "@/lib/utils";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const hideNav = pathname === "/" || pathname === "/join";
+  const hideNav =
+    pathname === "/" ||
+    pathname === "/join" ||
+    pathname.includes("/auth/handoff") ||
+    pathname.includes("/payment");
 
   return (
     <div className="flex min-h-screen bg-[#F8FAFC]">

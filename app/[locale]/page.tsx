@@ -219,8 +219,13 @@ export default function JoinPage() {
         
         if (response.ok && (data.token || data.attendee || token)) {
           if (token) localStorage.setItem("token", token);
-          localStorage.setItem("eventId", data.eventId || eventId);
-          router.push("/dashboard");
+          const finalEvId = data.eventId || eventId;
+          localStorage.setItem("eventId", finalEvId);
+          router.push(
+            `/auth/handoff?token=${encodeURIComponent(token || "")}&eventId=${encodeURIComponent(
+              finalEvId
+            )}&welcome=true`
+          );
         } else {
           console.error("Failed to register:", data);
           setError(data.message || data.error || "Failed to register. Please try again.");
