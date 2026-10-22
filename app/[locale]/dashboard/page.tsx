@@ -37,6 +37,7 @@ export default function DashboardPage() {
   const [eventData, setEventData] = useState<any>(null);
   const [attendeeData, setAttendeeData] = useState<any>(null);
   const [ticketData, setTicketData] = useState<any>(null);
+  const [progressData, setProgressData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
@@ -47,16 +48,33 @@ export default function DashboardPage() {
         const storedEventId = localStorage.getItem("eventId");
         const token = localStorage.getItem("token");
 
-        // Fetch attendee & ticket details
+        // Fetch live progress & attendee details
         if (token) {
           try {
-            const meRes = await fetch("/api/attendee/me", {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            if (meRes.ok) {
-              const meData = await meRes.json();
-              setAttendeeData(meData.user || meData.attendee);
-              setTicketData(meData.ticket || null);
+            const progressRes = await fetch(
+              `/api/attendee/progress?eventId=${encodeURIComponent(storedEventId || "")}`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              }
+            );
+            if (progressRes.ok) {
+              const pData = await progressRes.json();
+              if (pData.success) {
+                setProgressData(pData);
+                if (pData.attendee) setAttendeeData(pData.attendee);
+                if (pData.ticket) setTicketData(pData.ticket);
+                if (pData.event && !eventData) setEventData(pData.event);
+              }
+            } else {
+              // Fallback to /api/attendee/me
+              const meRes = await fetch("/api/attendee/me", {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (meRes.ok) {
+                const meData = await meRes.json();
+                setAttendeeData(meData.user || meData.attendee);
+                setTicketData(meData.ticket || null);
+              }
             }
           } catch (e) {
             console.warn("Could not fetch attendee details:", e);
@@ -99,11 +117,14 @@ export default function DashboardPage() {
   const isCheckedIn = Boolean(attendeeData?.isCheckedIn || ticketData?.isCheckedIn);
   const ticketOrderId =
     ticketData?.orderId ||
-    (attendeeData?._id ? `ORD-${attendeeData._id.slice(-6).toUpperCase()}` : "ORD-PASS");
+    (attendeeData?._id ? `ORD-${String(attendeeData._id).slice(-6).toUpperCase()}` : "ORD-PASS");
   const ticketTier = ticketData?.tier || "General Admission";
-  const pulseScore = attendeeData?.points ?? 450;
-  const attendeeRank = attendeeData?.rank ? `#${attendeeData.rank}` : "#12";
+  const pulseScore = progressData?.stats?.pulsePoints ?? attendeeData?.points ?? 450;
+  const attendeeRank = progressData?.stats?.rank ?? (attendeeData?.rank ? `#${attendeeData.rank}` : "#12");
   const attendeeName = attendeeData?.name || "Attendee";
+  const connectionsCount = progressData?.stats?.connectionsCount ?? 0;
+  const pollsTotal = progressData?.stats?.pollsTotal ?? 0;
+  const pollsVoted = progressData?.stats?.pollsVoted ?? 0;
 
   const milestones = [
     {
@@ -118,7 +139,11 @@ export default function DashboardPage() {
     {
       id: "checkin",
       title: "Venue Check-In",
-      subtitle: isCheckedIn ? "Checked in at Venue" : "Show QR badge at entrance",
+      subtitle: isCheckedIn
+        ? ticketData?.checkInTime
+          ? `Checked in at ${new Date(ticketData.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+          : "Checked in at Venue"
+        : "Present QR badge at entrance",
       status: (isCheckedIn ? "completed" : "pending") as "completed" | "pending",
       icon: QrCode,
       actionText: isCheckedIn ? "Verified ✓" : "Show Badge",
@@ -127,8 +152,8 @@ export default function DashboardPage() {
     {
       id: "trivia",
       title: "Pulse & Trivia",
-      subtitle: `${pulseScore} pts earned (${attendeeRank})`,
-      status: (pulseScore > 0 ? "completed" : "pending") as "completed" | "pending",
+      subtitle: `${pulseScore} pts • ${pollsVoted}/${pollsTotal || 1} Polls`,
+      status: (pulseScore > 0 || pollsVoted > 0 ? "completed" : "pending") as "completed" | "pending",
       icon: Zap,
       actionText: "Play Now",
       href: "/dashboard/games",
@@ -136,16 +161,16 @@ export default function DashboardPage() {
     {
       id: "networking",
       title: "Attendee Network",
-      subtitle: "Discover checked-in peers",
-      status: "completed" as const,
+      subtitle: connectionsCount > 0 ? `${connectionsCount} Connections made` : "Discover checked-in peers",
+      status: (connectionsCount > 0 ? "completed" : "pending") as "completed" | "pending",
       icon: Users,
-      actionText: "Connect",
+      actionText: connectionsCount > 0 ? "View Hub" : "Connect",
       href: "/dashboard/networking",
     },
   ];
 
   const completedCount = milestones.filter((m) => m.status === "completed").length;
-  const progressPercent = Math.round((completedCount / milestones.length) * 100);
+  const progressPercent = progressData?.progress?.percentage ?? Math.round((completedCount / milestones.length) * 100);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -370,7 +395,7 @@ export default function DashboardPage() {
         </Link>
 
         {/* Engagement Quick Stats */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <motion.div 
             whileHover={{ y: -5 }}
             className="p-5 bg-white rounded-3xl premium-shadow border border-slate-100"
@@ -379,8 +404,9 @@ export default function DashboardPage() {
               <Trophy className="w-5 h-5 text-eventeev-orange" />
             </div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t('yourRank')}</p>
-            <p className="text-2xl font-black text-eventeev-navy">#12</p>
+            <p className="text-2xl font-black text-eventeev-navy">{attendeeRank}</p>
           </motion.div>
+
           <motion.div 
             whileHover={{ y: -5 }}
             className="p-5 bg-eventeev-navy rounded-3xl shadow-xl"
@@ -389,7 +415,33 @@ export default function DashboardPage() {
               <Zap className="w-5 h-5 text-eventeev-orange" />
             </div>
             <p className="text-xs font-bold text-white/40 uppercase tracking-widest">{t('pulseScore')}</p>
-            <p className="text-2xl font-black text-white">450</p>
+            <p className="text-2xl font-black text-white">{pulseScore}</p>
+          </motion.div>
+
+          <motion.div 
+            whileHover={{ y: -5 }}
+            className="p-5 bg-white rounded-3xl premium-shadow border border-slate-100"
+          >
+            <div className="w-10 h-10 bg-blue-100 rounded-2xl flex items-center justify-center mb-4">
+              <Users className="w-5 h-5 text-blue-600" />
+            </div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Network</p>
+            <p className="text-2xl font-black text-eventeev-navy">
+              {connectionsCount} <span className="text-xs text-slate-400 font-semibold">peers</span>
+            </p>
+          </motion.div>
+
+          <motion.div 
+            whileHover={{ y: -5 }}
+            className="p-5 bg-white rounded-3xl premium-shadow border border-slate-100"
+          >
+            <div className="w-10 h-10 bg-emerald-100 rounded-2xl flex items-center justify-center mb-4">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+            </div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Polls Voted</p>
+            <p className="text-2xl font-black text-eventeev-navy">
+              {pollsVoted} <span className="text-xs text-slate-400 font-semibold">/ {pollsTotal || 1}</span>
+            </p>
           </motion.div>
         </div>
 
