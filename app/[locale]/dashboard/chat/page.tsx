@@ -131,7 +131,45 @@ export default function ChatPage() {
 
         setRooms(fetchedRooms);
 
-        if (fetchedRooms.length > 0) {
+        // Check if navigation requested direct chat with organizer (e.g. from Dashboard Host card)
+        const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+        const wantOrganizer = urlParams?.get("chatWith") === "organizer" || urlParams?.get("chatWith") === "host";
+
+        if (wantOrganizer) {
+          const existingOrgRoom = fetchedRooms.find((r: ChatRoom) => {
+            if (r.isGroup !== false && r.type !== "private") return false;
+            const other = r.otherParticipant || (r.participants || []).find((p: any) => String(p.id) !== String(initialUid));
+            return (
+              other?.role === "organizer" ||
+              other?.role === "admin" ||
+              other?.modelType === "User" ||
+              (participantsData?.organizer && String(other?.id) === String(participantsData.organizer.id))
+            );
+          });
+
+          if (existingOrgRoom) {
+            setActiveTab("direct");
+            setActiveRoomId(existingOrgRoom._id || existingOrgRoom.id || null);
+            setShowMobileChat(true);
+          } else if (participantsData?.organizer && initialUid) {
+            try {
+              const directRoom = await chatService.createDirectRoom(
+                storedEventId,
+                participantsData.organizer.id,
+                initialUid,
+                storedToken,
+                participantsData.organizer,
+                initialName
+              );
+              setRooms((prev) => [directRoom, ...prev.filter((r) => (r._id || r.id) !== (directRoom._id || directRoom.id))]);
+              setActiveTab("direct");
+              setActiveRoomId(directRoom._id || directRoom.id || null);
+              setShowMobileChat(true);
+            } catch (err) {
+              console.error("Auto-open organizer room error:", err);
+            }
+          }
+        } else if (fetchedRooms.length > 0) {
           // Select first room by default
           const initialRoom = fetchedRooms[0];
           setActiveRoomId(initialRoom._id || initialRoom.id || null);
@@ -317,7 +355,14 @@ export default function ChatPage() {
     if (!effectiveEventId || !effectiveToken) return;
 
     const decoded = parseJwt(effectiveToken);
-    const uid = currentUserId || decoded?.attendee?.id || decoded?.id || decoded?.user?.id;
+    const uid =
+      currentUserId ||
+      decoded?.attendee?.id ||
+      decoded?.attendee?._id ||
+      decoded?.id ||
+      decoded?._id ||
+      decoded?.user?.id ||
+      decoded?.user?._id;
     if (!uid) return;
 
     // 1. Check if direct room with organizer already exists in current rooms list
@@ -366,7 +411,11 @@ export default function ChatPage() {
 
       setRooms((prev) => {
         const exists = prev.find((r) => (r._id || r.id) === (directRoom._id || directRoom.id));
-        if (exists) return prev;
+        if (exists) {
+          return prev.map((r) =>
+            (r._id || r.id) === (directRoom._id || directRoom.id) ? { ...r, ...directRoom } : r
+          );
+        }
         return [directRoom, ...prev];
       });
 
@@ -383,13 +432,45 @@ export default function ChatPage() {
 
   // Select a participant from NewChatModal to start or open DM
   const handleSelectParticipant = async (participant: ChatParticipant) => {
+    // If the selected participant is the event organizer / host, route directly via handleChatWithOrganizer
+    if (
+      participant.role === "organizer" ||
+      participant.role === "admin" ||
+      participant.modelType === "User" ||
+      (organizer && String(participant.id) === String(organizer.id))
+    ) {
+      handleChatWithOrganizer();
+      return;
+    }
+
     const effectiveToken = token || (typeof window !== "undefined" ? localStorage.getItem("token") : null);
     const effectiveEventId = eventId || (typeof window !== "undefined" ? localStorage.getItem("eventId") : null);
     if (!effectiveEventId || !effectiveToken) return;
 
     const decoded = parseJwt(effectiveToken);
-    const uid = currentUserId || decoded?.attendee?.id || decoded?.id || decoded?.user?.id;
+    const uid =
+      currentUserId ||
+      decoded?.attendee?.id ||
+      decoded?.attendee?._id ||
+      decoded?.id ||
+      decoded?._id ||
+      decoded?.user?.id ||
+      decoded?.user?._id;
     if (!uid) return;
+
+    // Check if room with this participant already exists
+    const existingRoom = rooms.find((r) => {
+      if (r.isGroup !== false && r.type !== "private") return false;
+      const other = r.otherParticipant || (r.participants || []).find((p) => String(p.id) !== String(uid));
+      return String(other?.id) === String(participant.id);
+    });
+
+    if (existingRoom) {
+      setActiveTab("direct");
+      setActiveRoomId(existingRoom._id || existingRoom.id || null);
+      setShowMobileChat(true);
+      return;
+    }
 
     try {
       const directRoom = await chatService.createDirectRoom(
@@ -404,7 +485,11 @@ export default function ChatPage() {
 
       setRooms((prev) => {
         const exists = prev.find((r) => (r._id || r.id) === (directRoom._id || directRoom.id));
-        if (exists) return prev;
+        if (exists) {
+          return prev.map((r) =>
+            (r._id || r.id) === (directRoom._id || directRoom.id) ? { ...r, ...directRoom } : r
+          );
+        }
         return [directRoom, ...prev];
       });
 
@@ -419,7 +504,18 @@ export default function ChatPage() {
   // Send message
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || !activeRoomId || !currentUserId || isAnnouncement) return;
+    const effectiveToken = token || (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+    const decoded = effectiveToken ? parseJwt(effectiveToken) : null;
+    const effectiveSenderId =
+      currentUserId ||
+      decoded?.attendee?.id ||
+      decoded?.attendee?._id ||
+      decoded?.id ||
+      decoded?._id ||
+      decoded?.user?.id ||
+      decoded?.user?._id;
+
+    if (!input.trim() || !activeRoomId || !effectiveSenderId || isAnnouncement) return;
 
     const messageText = input.trim();
     setInput("");
@@ -430,8 +526,8 @@ export default function ChatPage() {
       clientMsgId,
       room: activeRoomId,
       sender: {
-        _id: currentUserId,
-        id: currentUserId,
+        _id: effectiveSenderId,
+        id: effectiveSenderId,
         name: currentUserName,
         avatar: currentUserAvatar || undefined,
       },
@@ -541,10 +637,21 @@ export default function ChatPage() {
           )}
         >
           {/* Quick Organizer Direct Chat Banner */}
-          <div className="p-3 bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-orange-500/5 border-b border-orange-100 flex items-center justify-between gap-2.5">
+          <div
+            onClick={handleChatWithOrganizer}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleChatWithOrganizer();
+              }
+            }}
+            className="p-3 bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-orange-500/5 border-b border-orange-100 flex items-center justify-between gap-2.5 cursor-pointer hover:bg-orange-500/15 active:scale-[0.99] transition-all group select-none"
+          >
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="relative flex-shrink-0">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-eventeev-orange p-0.5 shadow-sm shadow-orange-500/20">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-eventeev-orange p-0.5 shadow-sm shadow-orange-500/20 group-hover:scale-105 transition-transform">
                   <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center overflow-hidden">
                     {organizer?.avatar ? (
                       <img src={organizer.avatar} alt={organizer.name} className="w-full h-full object-cover" />
@@ -561,7 +668,7 @@ export default function ChatPage() {
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <p className="text-xs font-black text-eventeev-navy truncate">
+                  <p className="text-xs font-black text-eventeev-navy group-hover:text-eventeev-orange transition-colors truncate">
                     {organizer?.name || "Event Organizer"}
                   </p>
                   <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-100 text-amber-800 uppercase tracking-wider">
@@ -569,13 +676,16 @@ export default function ChatPage() {
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 font-medium truncate">
-                  Direct support & questions
+                  Direct support & questions · Tap to chat
                 </p>
               </div>
             </div>
 
             <button
-              onClick={handleChatWithOrganizer}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleChatWithOrganizer();
+              }}
               disabled={initiatingOrganizerChat}
               className="px-3 py-1.5 bg-eventeev-orange hover:bg-orange-600 active:scale-95 text-white text-xs font-bold rounded-xl shadow-sm shadow-orange-500/25 flex items-center gap-1.5 transition-all flex-shrink-0 cursor-pointer disabled:opacity-60"
             >

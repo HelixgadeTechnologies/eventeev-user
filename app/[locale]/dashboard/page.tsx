@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Calendar, MapPin, Bell, Trophy, Zap, ArrowRight, FileText, Download, Link as LinkIcon, Loader2, X, CheckCircle2 } from "lucide-react";
+import { Calendar, MapPin, Bell, Trophy, Zap, ArrowRight, FileText, Download, Link as LinkIcon, Loader2, X, CheckCircle2, Crown, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { MOCK_EVENT } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -50,6 +50,13 @@ export default function DashboardPage() {
     );
   }
 
+  const organizerName =
+    eventData?.owner?.name ||
+    `${eventData?.owner?.firstName || ""} ${eventData?.owner?.lastName || ""}`.trim() ||
+    eventData?.owner?.orgName ||
+    eventData?.organizer?.name ||
+    "Event Organizer";
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Hero Banner */}
@@ -92,6 +99,56 @@ export default function DashboardPage() {
       </div>
 
       <div className="px-6 py-8 space-y-8">
+        {/* Organizer / Event Host Quick Contact Banner */}
+        <Link
+          href="/dashboard/chat?chatWith=organizer"
+          className="block p-4 sm:p-5 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 hover:from-amber-500/15 hover:via-orange-500/15 hover:to-amber-500/10 rounded-3xl border border-orange-200/80 shadow-sm transition-all group cursor-pointer"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="relative flex-shrink-0">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-eventeev-orange p-0.5 shadow-sm shadow-orange-500/20 group-hover:scale-105 transition-transform">
+                  <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center overflow-hidden">
+                    {eventData?.owner?.avatar ? (
+                      <img
+                        src={eventData.owner.avatar}
+                        alt={organizerName}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-sm font-black text-eventeev-orange">
+                        {organizerName.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-amber-500 border-2 border-white flex items-center justify-center">
+                  <Crown className="w-2.5 h-2.5 text-white" />
+                </span>
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-black text-eventeev-navy group-hover:text-eventeev-orange transition-colors truncate">
+                    {organizerName}
+                  </p>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 uppercase tracking-wider">
+                    Host
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 font-medium truncate">
+                  Have questions about the event? Tap to chat directly with the organizer.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-4 py-2.5 bg-eventeev-orange group-hover:bg-orange-600 active:scale-95 text-white text-xs font-black rounded-2xl shadow-md shadow-orange-500/25 flex items-center gap-2 transition-all flex-shrink-0">
+              <MessageSquare className="w-4 h-4" />
+              <span className="hidden sm:inline">Chat with Host</span>
+              <span className="sm:hidden">Chat</span>
+            </div>
+          </div>
+        </Link>
+
         {/* Engagement Quick Stats */}
         <div className="grid grid-cols-2 gap-4">
           <motion.div 
