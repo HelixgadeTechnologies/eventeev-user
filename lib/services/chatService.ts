@@ -325,15 +325,33 @@ export const chatService = {
 
     body.participants = participantsList;
 
-    const res = await fetch(`${API_BASE_URL}/api/chat/room`, {
-      method: "POST",
-      headers: getHeaders(token),
-      body: JSON.stringify(body),
-    });
+    // Try local Next.js proxy first — it creates the room directly in MongoDB
+    // using the shared JWT secret, bypassing upstream auth restrictions.
+    let res: Response | null = null;
+    let localFailed = false;
+    try {
+      res = await fetch(`/api/chat/room`, {
+        method: "POST",
+        headers: getHeaders(token),
+        body: JSON.stringify(body),
+      });
+    } catch {
+      // Only fall back to upstream on network-level errors (local server unreachable)
+      localFailed = true;
+    }
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      throw new Error(err?.message || `Failed to create direct room: ${res.statusText}`);
+    // Fallback to direct upstream only on network error (not HTTP 4xx/5xx)
+    if (localFailed) {
+      res = await fetch(`${API_BASE_URL}/api/chat/room`, {
+        method: "POST",
+        headers: getHeaders(token),
+        body: JSON.stringify(body),
+      });
+    }
+
+    if (!res || !res.ok) {
+      const err = await res?.json().catch(() => null);
+      throw new Error(err?.message || `Failed to create direct room: ${res?.statusText ?? "Unknown error"}`);
     }
 
     const room = await res.json();

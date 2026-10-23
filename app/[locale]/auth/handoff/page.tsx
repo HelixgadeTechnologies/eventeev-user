@@ -133,7 +133,6 @@ function HandoffContent() {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          router.push("/dashboard");
           return 0;
         }
         return prev - 1;
@@ -141,7 +140,15 @@ function HandoffContent() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [status, router]);
+  }, [status]);
+
+  // Redirect when countdown reaches zero — kept separate to avoid calling
+  // router.push() inside a state updater (which triggers the React warning).
+  useEffect(() => {
+    if (status === "success" && countdown === 0) {
+      router.push("/dashboard");
+    }
+  }, [countdown, status, router]);
 
   const handleEnterDashboard = () => {
     router.push("/dashboard");
