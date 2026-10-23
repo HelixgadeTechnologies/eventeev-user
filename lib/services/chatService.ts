@@ -67,6 +67,24 @@ export const chatService = {
    * Fetch all accessible rooms for an event (public/group rooms and personal DMs)
    */
   async getRooms(eventId: string, token: string): Promise<ChatRoom[]> {
+    try {
+      const localRes = await fetch(`/api/chat/rooms/${eventId}`, {
+        headers: getHeaders(token),
+      });
+      if (localRes.ok) {
+        const localData = await localRes.json();
+        const list = Array.isArray(localData) ? localData : (localData.rooms || []);
+        if (list.length > 0) {
+          return list.map((room: any) => ({
+            ...room,
+            id: room._id || room.id,
+          }));
+        }
+      }
+    } catch {
+      // ignore and fallback to upstream
+    }
+
     const res = await fetch(`${API_BASE_URL}/api/chat/rooms/${eventId}`, {
       headers: getHeaders(token),
     });
@@ -268,6 +286,28 @@ export const chatService = {
       const err = await res.json().catch(() => null);
       throw new Error(err?.message || `Failed to send message: ${res.statusText}`);
     }
+    return res.json();
+  },
+
+  /**
+   * Upload an image or attachment file
+   */
+  async uploadFile(
+    file: File
+  ): Promise<{ url: string; filename: string; size: number; contentType: string }> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch("/api/chat/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || err?.message || "Failed to upload file");
+    }
+
     return res.json();
   },
 

@@ -1,5 +1,8 @@
 import mongoose from 'mongoose';
 
+const DEFAULT_MONGODB_URI =
+  'mongodb+srv://weareeventeev:Helixgade077%40@cluster0.tlihb.mongodb.net/eventeev?appName=Cluster0';
+
 let cached = (global as any).mongoose;
 
 if (!cached) {
@@ -7,7 +10,7 @@ if (!cached) {
 }
 
 async function dbConnect() {
-  const MONGODB_URI = process.env.MONGODB_URI;
+  const MONGODB_URI = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
 
   if (!MONGODB_URI) {
     throw new Error(

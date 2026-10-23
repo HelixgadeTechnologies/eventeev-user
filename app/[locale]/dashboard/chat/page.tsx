@@ -17,11 +17,20 @@ import {
   Radio,
   Check,
   CheckCheck,
+  Smile,
+  Paperclip,
+  ImageIcon,
+  FileText,
+  X,
+  Download,
+  Maximize2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { initSocket, disconnectSocket } from "@/lib/socket";
 import { chatService, ChatRoom, ChatMessage, ChatParticipant } from "@/lib/services/chatService";
 import { NewChatModal } from "@/components/chat/NewChatModal";
+import EmojiPicker from "@/components/chat/EmojiPicker";
+import MediaLightbox from "@/components/chat/MediaLightbox";
 
 function parseJwt(token: string) {
   try {
@@ -72,10 +81,80 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const activeRoomIdRef = useRef<string | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
+  const currentUserNameRef = useRef<string>("Attendee");
+
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [selectedAttachment, setSelectedAttachment] = useState<File | null>(null);
+  const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState<string | null>(null);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightboxTitle, setLightboxTitle] = useState<string>("Image Preview");
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle attachment file selection
+  const handleSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert("Please select a file smaller than 10MB");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    if (attachmentPreviewUrl) {
+      URL.revokeObjectURL(attachmentPreviewUrl);
+    }
+
+    setSelectedAttachment(file);
+    if (file.type.startsWith("image/")) {
+      const url = URL.createObjectURL(file);
+      setAttachmentPreviewUrl(url);
+    } else {
+      setAttachmentPreviewUrl(null);
+    }
+  };
+
+  const handleRemoveAttachment = () => {
+    if (attachmentPreviewUrl) {
+      URL.revokeObjectURL(attachmentPreviewUrl);
+    }
+    setSelectedAttachment(null);
+    setAttachmentPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // Handle emoji insertion into text input
+  const handleSelectEmoji = (emoji: string) => {
+    const inputEl = textInputRef.current;
+    if (inputEl) {
+      const start = inputEl.selectionStart ?? input.length;
+      const end = inputEl.selectionEnd ?? input.length;
+      const updated = input.substring(0, start) + emoji + input.substring(end);
+      setInput(updated);
+      setTimeout(() => {
+        inputEl.focus();
+        inputEl.setSelectionRange(start + emoji.length, start + emoji.length);
+      }, 0);
+    } else {
+      setInput((prev) => prev + emoji);
+    }
+  };
 
   useEffect(() => {
     activeRoomIdRef.current = activeRoomId;
   }, [activeRoomId]);
+
+  useEffect(() => {
+    currentUserIdRef.current = currentUserId;
+  }, [currentUserId]);
+
+  useEffect(() => {
+    currentUserNameRef.current = currentUserName;
+  }, [currentUserName]);
 
   // Initial Auth & Data Fetch
   useEffect(() => {
@@ -240,25 +319,80 @@ export default function ChatPage() {
     socket.emit("join_room", activeRoomId);
 
     const handleReceiveMessage = (newMessage: any) => {
-      const msgRoomId = typeof newMessage.room === "object" ? newMessage.room?._id : newMessage.room;
+      const msgRoomId =
+        typeof newMessage.room === "object"
+          ? String(newMessage.room?._id || newMessage.room?.id || "")
+          : String(newMessage.room || "");
 
-      if (msgRoomId === activeRoomIdRef.current) {
+      const currentRoomId = activeRoomIdRef.current ? String(activeRoomIdRef.current) : "";
+
+      if (msgRoomId === currentRoomId) {
         setMessages((prev) => {
-          // Deduplicate by _id or clientMsgId
-          const exists = prev.some(
+          const newMsgId = String(newMessage._id || newMessage.id || "");
+          const newClientMsgId = newMessage.clientMsgId ? String(newMessage.clientMsgId) : null;
+
+          // 1. Direct deduplication: already exists by server _id or clientMsgId
+          const exactMatchIndex = prev.findIndex(
             (m) =>
-              (newMessage._id && m._id === newMessage._id) ||
-              (newMessage.clientMsgId && m.clientMsgId === newMessage.clientMsgId)
+              (newMsgId && (String(m._id) === newMsgId || String((m as any).id) === newMsgId)) ||
+              (newClientMsgId && m.clientMsgId && String(m.clientMsgId) === newClientMsgId)
           );
-          if (exists) {
-            return prev.map((m) =>
-              (newMessage._id && m._id === newMessage._id) ||
-              (newMessage.clientMsgId && m.clientMsgId === newMessage.clientMsgId)
-                ? { ...newMessage, isSending: false }
-                : m
-            );
+
+          if (exactMatchIndex !== -1) {
+            const updated = [...prev];
+            updated[exactMatchIndex] = {
+              ...newMessage,
+              _id: newMsgId || String(prev[exactMatchIndex]._id),
+              id: newMsgId || String(prev[exactMatchIndex]._id),
+              clientMsgId: prev[exactMatchIndex].clientMsgId || newClientMsgId,
+              isSending: false,
+              error: false,
+            };
+            return updated;
           }
-          return [...prev, newMessage];
+
+          // 2. Optimistic match: server didn't echo clientMsgId, so match pending isSending message
+          const newSenderId =
+            typeof newMessage.sender === "object"
+              ? String(newMessage.sender?._id || newMessage.sender?.id || "")
+              : String(newMessage.sender || "");
+
+          const myId = currentUserIdRef.current ? String(currentUserIdRef.current) : "";
+          const myName = currentUserNameRef.current || "";
+
+          const isSelfSender =
+            Boolean((myId && newSenderId === myId) || (myName && newMessage.senderName === myName));
+
+          const pendingIndex = prev.findIndex(
+            (m) =>
+              m.isSending &&
+              m.content?.trim() === newMessage.content?.trim() &&
+              (isSelfSender || String(m.senderName) === String(newMessage.senderName))
+          );
+
+          if (pendingIndex !== -1) {
+            const updated = [...prev];
+            updated[pendingIndex] = {
+              ...newMessage,
+              _id: newMsgId || String(prev[pendingIndex]._id),
+              id: newMsgId || String(prev[pendingIndex]._id),
+              clientMsgId: prev[pendingIndex].clientMsgId,
+              isSending: false,
+              error: false,
+            };
+            return updated;
+          }
+
+          // 3. Otherwise append new message
+          return [
+            ...prev,
+            {
+              ...newMessage,
+              _id: newMsgId,
+              id: newMsgId,
+              isSending: false,
+            },
+          ];
         });
       } else if (msgRoomId) {
         // Increment unread count for background room
@@ -515,49 +649,148 @@ export default function ChatPage() {
       decoded?.user?.id ||
       decoded?.user?._id;
 
-    if (!input.trim() || !activeRoomId || !effectiveSenderId || isAnnouncement) return;
+    const hasAttachment = Boolean(selectedAttachment);
+    const hasText = Boolean(input.trim());
+
+    if ((!hasText && !hasAttachment) || !activeRoomId || !effectiveSenderId || isAnnouncement) return;
 
     const messageText = input.trim();
+    const fileToSend = selectedAttachment;
+    const previewUrlToSend = attachmentPreviewUrl;
+
+    // Reset input fields immediately
     setInput("");
+    handleRemoveAttachment();
+    setIsEmojiPickerOpen(false);
 
-    const clientMsgId = `client-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const optimisticMsg: ChatMessage = {
-      _id: clientMsgId,
-      clientMsgId,
-      room: activeRoomId,
-      sender: {
-        _id: effectiveSenderId,
-        id: effectiveSenderId,
-        name: currentUserName,
-        avatar: currentUserAvatar || undefined,
-      },
-      senderName: currentUserName,
-      senderAvatar: currentUserAvatar || undefined,
-      senderModel: "Attendee",
-      content: messageText,
-      type: "user_message",
-      createdAt: new Date().toISOString(),
-      isSending: true,
-    };
+    // If an attachment is being sent, upload it and send it
+    if (fileToSend) {
+      setIsUploadingAttachment(true);
+      const isImg = fileToSend.type.startsWith("image/");
+      const mediaClientMsgId = `client-media-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const optimisticMediaMsg: ChatMessage = {
+        _id: mediaClientMsgId,
+        clientMsgId: mediaClientMsgId,
+        room: activeRoomId,
+        sender: {
+          _id: effectiveSenderId,
+          id: effectiveSenderId,
+          name: currentUserName,
+          avatar: currentUserAvatar || undefined,
+        },
+        senderName: currentUserName,
+        senderAvatar: currentUserAvatar || undefined,
+        senderModel: "Attendee",
+        content: previewUrlToSend || fileToSend.name,
+        type: isImg ? "image" : "file",
+        createdAt: new Date().toISOString(),
+        isSending: true,
+      };
 
-    // Optimistic UI Update
-    setMessages((prev) => [...prev, optimisticMsg]);
+      setMessages((prev) => [...prev, optimisticMediaMsg]);
 
-    try {
-      const socket = initSocket(token);
-      if (socket && socket.connected) {
-        socket.emit("send_message", {
-          room: activeRoomId,
-          sender: currentUserId,
-          senderName: currentUserName,
-          senderAvatar: currentUserAvatar,
-          content: messageText,
-          type: "user_message",
-          clientMsgId,
-        });
-      } else {
-        // Fallback to REST API if socket is disconnected
-        if (token) {
+      setTimeout(() => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.clientMsgId === mediaClientMsgId && m.isSending
+              ? { ...m, isSending: false, error: true }
+              : m
+          )
+        );
+      }, 15000);
+
+      try {
+        const uploadRes = await chatService.uploadFile(fileToSend);
+        const uploadedUrl = uploadRes.url;
+        const mediaType: "image" | "file" = uploadRes.contentType.startsWith("image/") ? "image" : "file";
+
+        const socket = initSocket(token);
+        if (socket && socket.connected) {
+          socket.emit("send_message", {
+            room: activeRoomId,
+            sender: effectiveSenderId,
+            senderName: currentUserName,
+            senderAvatar: currentUserAvatar,
+            content: uploadedUrl,
+            type: mediaType,
+            clientMsgId: mediaClientMsgId,
+          });
+        } else if (token) {
+          const sent = await chatService.sendMessageREST(
+            activeRoomId,
+            uploadedUrl,
+            token,
+            currentUserName,
+            currentUserAvatar || undefined,
+            mediaType
+          );
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.clientMsgId === mediaClientMsgId
+                ? { ...sent, _id: sent._id || (sent as any).id, isSending: false, error: false }
+                : m
+            )
+          );
+        }
+      } catch (uploadErr) {
+        console.error("Failed to upload attachment:", uploadErr);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.clientMsgId === mediaClientMsgId ? { ...m, isSending: false, error: true } : m
+          )
+        );
+      } finally {
+        setIsUploadingAttachment(false);
+      }
+    }
+
+    // If there is also text, send the text message
+    if (hasText) {
+      const clientMsgId = `client-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const optimisticMsg: ChatMessage = {
+        _id: clientMsgId,
+        clientMsgId,
+        room: activeRoomId,
+        sender: {
+          _id: effectiveSenderId,
+          id: effectiveSenderId,
+          name: currentUserName,
+          avatar: currentUserAvatar || undefined,
+        },
+        senderName: currentUserName,
+        senderAvatar: currentUserAvatar || undefined,
+        senderModel: "Attendee",
+        content: messageText,
+        type: "user_message",
+        createdAt: new Date().toISOString(),
+        isSending: true,
+      };
+
+      setMessages((prev) => [...prev, optimisticMsg]);
+
+      setTimeout(() => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.clientMsgId === clientMsgId && m.isSending
+              ? { ...m, isSending: false, error: true }
+              : m
+          )
+        );
+      }, 12000);
+
+      try {
+        const socket = initSocket(token);
+        if (socket && socket.connected) {
+          socket.emit("send_message", {
+            room: activeRoomId,
+            sender: effectiveSenderId,
+            senderName: currentUserName,
+            senderAvatar: currentUserAvatar,
+            content: messageText,
+            type: "user_message",
+            clientMsgId,
+          });
+        } else if (token) {
           const sent = await chatService.sendMessageREST(
             activeRoomId,
             messageText,
@@ -566,15 +799,19 @@ export default function ChatPage() {
             currentUserAvatar || undefined
           );
           setMessages((prev) =>
-            prev.map((m) => (m.clientMsgId === clientMsgId ? { ...sent, isSending: false } : m))
+            prev.map((m) =>
+              m.clientMsgId === clientMsgId
+                ? { ...sent, _id: sent._id || (sent as any).id, isSending: false, error: false }
+                : m
+            )
           );
         }
+      } catch (err) {
+        console.error("Failed to send message:", err);
+        setMessages((prev) =>
+          prev.map((m) => (m.clientMsgId === clientMsgId ? { ...m, isSending: false, error: true } : m))
+        );
       }
-    } catch (err) {
-      console.error("Failed to send message:", err);
-      setMessages((prev) =>
-        prev.map((m) => (m.clientMsgId === clientMsgId ? { ...m, isSending: false, error: true } : m))
-      );
     }
   };
 
@@ -1121,18 +1358,91 @@ export default function ChatPage() {
                               </div>
                             )}
 
-                            <div
-                              className={cn(
-                                "px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-medium leading-relaxed break-words shadow-xs",
-                                isMe
-                                  ? "bg-eventeev-orange text-white rounded-br-xs"
-                                  : isHostSender
-                                  ? "bg-white border-2 border-amber-300 text-eventeev-navy rounded-bl-xs"
-                                  : "bg-white border border-slate-100 text-eventeev-navy rounded-bl-xs"
-                              )}
-                            >
-                              {msg.content}
-                            </div>
+                            {(() => {
+                              const isImage =
+                                msg.type === "image" ||
+                                (typeof msg.content === "string" &&
+                                  (msg.content.startsWith("/api/chat/upload") ||
+                                    msg.content.startsWith("data:image/") ||
+                                    msg.content.match(/^https?:\/\/.*\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i)));
+
+                              const isFile = msg.type === "file";
+
+                              if (isImage) {
+                                return (
+                                  <div
+                                    className={cn(
+                                      "rounded-2xl overflow-hidden shadow-xs cursor-pointer group relative max-w-xs sm:max-w-sm border transition-all",
+                                      isMe
+                                        ? "bg-orange-50 border-orange-200"
+                                        : "bg-white border-slate-200/80"
+                                    )}
+                                    onClick={() => {
+                                      setLightboxUrl(msg.content);
+                                      setLightboxTitle(`Image by ${senderName}`);
+                                    }}
+                                  >
+                                    <img
+                                      src={msg.content}
+                                      alt="Shared image"
+                                      className="max-h-64 sm:max-h-72 w-auto object-cover rounded-xl"
+                                      loading="lazy"
+                                    />
+                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                      <div className="px-3 py-1.5 rounded-xl bg-black/60 text-white backdrop-blur-xs flex items-center gap-1.5 text-xs font-semibold shadow-lg">
+                                        <Maximize2 className="w-3.5 h-3.5" />
+                                        <span>Click to view</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              if (isFile) {
+                                return (
+                                  <div
+                                    className={cn(
+                                      "p-3 rounded-2xl flex items-center gap-3 max-w-xs shadow-xs border",
+                                      isMe
+                                        ? "bg-orange-50 border-orange-200 text-eventeev-navy"
+                                        : "bg-white border-slate-200/80 text-eventeev-navy"
+                                    )}
+                                  >
+                                    <div className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 flex-shrink-0">
+                                      <FileText className="w-4 h-4 text-eventeev-orange" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-bold truncate">Attachment</p>
+                                      <a
+                                        href={msg.content}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        download
+                                        className="text-[11px] font-semibold text-eventeev-orange hover:underline flex items-center gap-1 mt-0.5"
+                                      >
+                                        <Download className="w-3 h-3" />
+                                        <span>Download</span>
+                                      </a>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div
+                                  className={cn(
+                                    "px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-medium leading-relaxed break-words shadow-xs",
+                                    isMe
+                                      ? "bg-eventeev-orange text-white rounded-br-xs"
+                                      : isHostSender
+                                      ? "bg-white border-2 border-amber-300 text-eventeev-navy rounded-bl-xs"
+                                      : "bg-white border border-slate-100 text-eventeev-navy rounded-bl-xs"
+                                  )}
+                                >
+                                  {msg.content}
+                                </div>
+                              );
+                            })()}
 
                             <div className="flex items-center gap-1 mt-1 px-1">
                               <span className="text-[10px] font-semibold text-slate-400">
@@ -1165,35 +1475,141 @@ export default function ChatPage() {
               </div>
 
               {/* Message Input Area */}
-              <div className="p-3 sm:p-4 bg-white border-t border-slate-100 flex-shrink-0">
+              <div className="p-3 sm:p-4 bg-white border-t border-slate-100 flex-shrink-0 relative">
                 {isAnnouncement ? (
                   <div className="h-12 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-center gap-2 text-xs font-semibold text-slate-400 px-4">
                     <Lock className="w-3.5 h-3.5" />
                     <span>Only event organizers can send messages in this channel</span>
                   </div>
                 ) : (
-                  <form onSubmit={handleSend} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      placeholder={`Message ${activeRoom.displayName || activeRoom.name}...`}
-                      className="flex-1 h-12 bg-slate-50 border border-slate-200 rounded-2xl px-4 text-xs sm:text-sm font-medium text-eventeev-navy placeholder:text-slate-400 focus:outline-none focus:border-eventeev-orange transition-colors"
+                  <>
+                    {/* Emoji Picker Popover */}
+                    <EmojiPicker
+                      isOpen={isEmojiPickerOpen}
+                      onClose={() => setIsEmojiPickerOpen(false)}
+                      onSelectEmoji={handleSelectEmoji}
                     />
-                    <button
-                      type="submit"
-                      disabled={!input.trim()}
-                      className="h-12 w-12 bg-eventeev-orange hover:bg-orange-600 disabled:opacity-40 disabled:hover:bg-eventeev-orange active:scale-95 transition-all rounded-2xl flex items-center justify-center text-white shadow-lg shadow-orange-500/20 flex-shrink-0"
-                    >
-                      <Send className="w-4 h-4 ml-0.5" />
-                    </button>
-                  </form>
+
+                    {/* Attachment Staging Preview */}
+                    {selectedAttachment && (
+                      <div className="mb-2.5 px-3 py-2 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between gap-3 shadow-xs animate-in fade-in duration-150">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {attachmentPreviewUrl ? (
+                            <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 flex-shrink-0 bg-white">
+                              <img
+                                src={attachmentPreviewUrl}
+                                alt="Attachment preview"
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-orange-100/60 border border-orange-200 flex items-center justify-center text-eventeev-orange flex-shrink-0">
+                              <FileText className="w-5 h-5" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-eventeev-navy truncate">
+                              {selectedAttachment.name}
+                            </p>
+                            <p className="text-[10px] font-semibold text-slate-400">
+                              {(selectedAttachment.size / (1024 * 1024)).toFixed(2)} MB
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleRemoveAttachment}
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition-colors flex-shrink-0"
+                          title="Remove attachment"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Hidden File Input */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*,application/pdf,.doc,.docx,.txt"
+                      onChange={handleSelectFile}
+                      className="hidden"
+                    />
+
+                    <form onSubmit={handleSend} className="flex items-center gap-1.5 sm:gap-2">
+                      {/* Emoji Button */}
+                      <button
+                        type="button"
+                        onClick={() => setIsEmojiPickerOpen((prev) => !prev)}
+                        className={cn(
+                          "h-11 w-11 sm:h-12 sm:w-12 rounded-2xl flex items-center justify-center transition-all flex-shrink-0",
+                          isEmojiPickerOpen
+                            ? "bg-orange-100 text-eventeev-orange border border-orange-200 shadow-xs"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-eventeev-navy border border-slate-200"
+                        )}
+                        title="Add emoji"
+                      >
+                        <Smile className="w-4 h-4 sm:w-5 sm:h-5" />
+                      </button>
+
+                      {/* Attachment / Image Button */}
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className={cn(
+                          "h-11 w-11 sm:h-12 sm:w-12 rounded-2xl flex items-center justify-center transition-all flex-shrink-0",
+                          selectedAttachment
+                            ? "bg-orange-100 text-eventeev-orange border border-orange-200 shadow-xs"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-eventeev-navy border border-slate-200"
+                        )}
+                        title="Attach image or document"
+                      >
+                        <Paperclip className="w-4 h-4 sm:w-5 sm:h-5" />
+                      </button>
+
+                      {/* Text Input */}
+                      <input
+                        ref={textInputRef}
+                        type="text"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        placeholder={
+                          selectedAttachment
+                            ? "Add a caption (optional)..."
+                            : `Message ${activeRoom.displayName || activeRoom.name}...`
+                        }
+                        className="flex-1 h-11 sm:h-12 bg-slate-50 border border-slate-200 rounded-2xl px-3 sm:px-4 text-xs sm:text-sm font-medium text-eventeev-navy placeholder:text-slate-400 focus:outline-none focus:border-eventeev-orange transition-colors"
+                      />
+
+                      {/* Send Button */}
+                      <button
+                        type="submit"
+                        disabled={(!input.trim() && !selectedAttachment) || isUploadingAttachment}
+                        className="h-11 w-11 sm:h-12 sm:w-12 bg-eventeev-orange hover:bg-orange-600 disabled:opacity-40 disabled:hover:bg-eventeev-orange active:scale-95 transition-all rounded-2xl flex items-center justify-center text-white shadow-lg shadow-orange-500/20 flex-shrink-0"
+                        title="Send message"
+                      >
+                        {isUploadingAttachment ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4 ml-0.5" />
+                        )}
+                      </button>
+                    </form>
+                  </>
                 )}
               </div>
             </>
           )}
         </div>
       </div>
+
+      {/* Fullscreen Image Preview Lightbox */}
+      <MediaLightbox
+        isOpen={Boolean(lightboxUrl)}
+        onClose={() => setLightboxUrl(null)}
+        mediaUrl={lightboxUrl}
+        title={lightboxTitle}
+      />
 
       {/* New Direct Message Modal */}
       <NewChatModal

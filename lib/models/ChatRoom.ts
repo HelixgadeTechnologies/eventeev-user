@@ -14,9 +14,12 @@ export interface IChatRoom extends Document {
     role?: string;
     modelType?: string;
   }[];
+  leadParticipant?: any;
+  createdBy?: any;
   lastMessage?: string;
   lastMessageAt?: Date;
   createdAt: Date;
+  updatedAt?: Date;
 }
 
 const ChatRoomSchema: Schema = new Schema(
@@ -36,10 +39,16 @@ const ChatRoomSchema: Schema = new Schema(
         modelType: { type: String },
       },
     ],
-    lastMessage:   { type: String },
-    lastMessageAt: { type: Date },
+    leadParticipant: { type: Schema.Types.Mixed },
+    createdBy:       { type: Schema.Types.Mixed },
+    lastMessage:     { type: String },
+    lastMessageAt:   { type: Date },
   },
-  { timestamps: true }
+  { timestamps: true, collection: 'rooms' }
 );
 
-export default mongoose.models.ChatRoom || mongoose.model<IChatRoom>('ChatRoom', ChatRoomSchema);
+if (mongoose.models && mongoose.models.ChatRoom) {
+  delete mongoose.models.ChatRoom;
+}
+
+export default mongoose.model<IChatRoom>('ChatRoom', ChatRoomSchema, 'rooms');
