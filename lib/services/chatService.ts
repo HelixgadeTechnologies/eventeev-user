@@ -225,12 +225,41 @@ export const chatService = {
     page = 1,
     limit = 50
   ): Promise<{ data: ChatMessage[]; pagination: ChatPagination }> {
+    // 1. Try local Next.js endpoint first
+    try {
+      const localRes = await fetch(
+        `/api/chat/messages/${roomId}?page=${page}&limit=${limit}`,
+        {
+          headers: getHeaders(token),
+        }
+      );
+      if (localRes.ok) {
+        const json = await localRes.json();
+        const list = Array.isArray(json)
+          ? json
+          : Array.isArray(json.data)
+          ? json.data
+          : Array.isArray(json.messages)
+          ? json.messages
+          : [];
+        return {
+          data: list,
+          pagination: json.pagination || { total: list.length, page, pages: 1, limit },
+        };
+      }
+    } catch {
+      // Fall back to upstream
+    }
+
+    // 2. Upstream fallback
     const res = await fetch(`${API_BASE_URL}/api/chat/messages/${roomId}?page=${page}&limit=${limit}`, {
       headers: getHeaders(token),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      throw new Error(err?.message || `Failed to fetch messages: ${res.statusText}`);
+      return {
+        data: [],
+        pagination: { total: 0, page, pages: 1, limit },
+      };
     }
     const json = await res.json();
 
@@ -272,6 +301,25 @@ export const chatService = {
     senderAvatar?: string,
     type: "user_message" | "system_message" | "image" | "file" = "user_message"
   ): Promise<ChatMessage> {
+    try {
+      const localRes = await fetch(`/api/chat/messages/${roomId}`, {
+        method: "POST",
+        headers: getHeaders(token),
+        body: JSON.stringify({
+          content,
+          type,
+          senderName,
+          senderAvatar,
+        }),
+      });
+      if (localRes.ok) {
+        const data = await localRes.json();
+        return data.message || data;
+      }
+    } catch {
+      // Fall back to upstream
+    }
+
     const res = await fetch(`${API_BASE_URL}/api/chat/messages/${roomId}`, {
       method: "POST",
       headers: getHeaders(token),

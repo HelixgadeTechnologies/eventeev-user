@@ -11,6 +11,7 @@ export interface IEvent extends Document {
   price?: number;
   speakers?: string[];
   dedicatedTrivia?: mongoose.Types.ObjectId;
+  owner?: any;
   status: string;
   createdAt: Date;
 }
@@ -26,12 +27,18 @@ const EventSchema: Schema = new Schema({
   price: { type: Number },
   speakers: [{ type: String }],
   dedicatedTrivia: { type: Schema.Types.ObjectId, ref: 'Trivia' },
+  owner: { type: Schema.Types.Mixed, ref: 'User' },
   status: { type: String, default: "Draft" },
   createdAt: { type: Date, default: Date.now },
 }, {
   strict: false,
+  strictPopulate: false,
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
 });
 
-export default mongoose.models.Event || mongoose.model<IEvent>('Event', EventSchema);
+if (mongoose.models && mongoose.models.Event) {
+  delete mongoose.models.Event;
+}
+
+export default mongoose.model<IEvent>('Event', EventSchema);

@@ -3,6 +3,7 @@ import dbConnect from "@/lib/db";
 import Event from "@/lib/models/Event";
 import Ticket from "@/lib/models/Ticket";
 import Attendee from "@/lib/models/Attendee";
+import User from "@/lib/models/User";
 import { verifyToken } from "@/lib/jwt";
 import mongoose from "mongoose";
 
@@ -80,7 +81,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ even
         if (mongoose.isValidObjectId(eventId)) {
           const eventDoc: any = await Event.findById(eventId).populate({
             path: "owner",
+            model: User,
             select: "firstName lastName name orgName avatar email",
+            strictPopulate: false,
           });
 
           if (eventDoc?.owner) {
