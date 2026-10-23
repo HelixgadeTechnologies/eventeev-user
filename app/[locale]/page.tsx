@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import { useRouter } from "@/i18n/routing";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { QrCode, ArrowRight, ShieldCheck, Mail, User, Calendar, MapPin, X, FileText, Ticket, LogIn, Sparkles, LogOut, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export default function JoinPage() {
+function JoinPageContent() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [authMode, setAuthMode] = useState<"join" | "signin">("join");
   const [code, setCode] = useState("");
@@ -29,6 +30,44 @@ export default function JoinPage() {
   const [loginLoading, setLoginLoading] = useState(false);
   
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // On mount: check for landing page redirect params (token, orderId, reference, eventId)
+  useEffect(() => {
+    if (!searchParams) return;
+    const tokenParam = searchParams.get("token");
+    const refParam =
+      searchParams.get("orderId") ||
+      searchParams.get("ticketRef") ||
+      searchParams.get("reference") ||
+      searchParams.get("trxref") ||
+      searchParams.get("ref");
+    const emailParam = searchParams.get("email");
+    const eventParam = searchParams.get("event") || searchParams.get("eventId") || searchParams.get("code");
+    const nameParam = searchParams.get("name");
+
+    // If redirected with token or order reference, automatically hand off to dashboard
+    if (tokenParam || refParam) {
+      router.replace(`/auth/handoff?${searchParams.toString()}`);
+      return;
+    }
+
+    if (emailParam && eventParam) {
+      router.replace(`/auth/handoff?${searchParams.toString()}`);
+      return;
+    }
+
+    if (eventParam) {
+      setCode(eventParam);
+    }
+    if (emailParam) {
+      setEmail(emailParam);
+      setLoginIdentifier(emailParam);
+    }
+    if (nameParam) {
+      setFullName(nameParam);
+    }
+  }, [searchParams, router]);
 
   // On mount: check if attendee already has an active session
   useEffect(() => {
@@ -909,5 +948,19 @@ export default function JoinPage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function JoinPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <div className="w-10 h-10 border-4 border-[#FF5722] border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <JoinPageContent />
+    </Suspense>
   );
 }

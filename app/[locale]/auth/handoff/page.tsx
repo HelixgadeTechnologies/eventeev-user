@@ -49,8 +49,13 @@ function HandoffContent() {
   const searchParams = useSearchParams();
 
   const tokenParam = searchParams.get("token");
-  const eventIdParam = searchParams.get("eventId");
-  const ticketRefParam = searchParams.get("ticketRef") || searchParams.get("reference");
+  const eventIdParam = searchParams.get("eventId") || searchParams.get("event") || searchParams.get("code");
+  const ticketRefParam =
+    searchParams.get("ticketRef") ||
+    searchParams.get("reference") ||
+    searchParams.get("orderId") ||
+    searchParams.get("trxref") ||
+    searchParams.get("ref");
   const emailParam = searchParams.get("email");
 
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");

@@ -70,13 +70,39 @@ async function handleHandoff(
         attendeeObj = await Attendee.findOne({ email: attendeeEmail.toLowerCase() }).lean();
       }
 
+      // Check Attendee by order reference / ticket reference
+      if (!attendeeObj && inputTicketRef) {
+        const cleanRef = inputTicketRef.trim();
+        attendeeObj = await Attendee.findOne({
+          $or: [
+            { orderId: new RegExp(`^${cleanRef}$`, "i") },
+            { reference: new RegExp(`^${cleanRef}$`, "i") },
+            { ticketRef: new RegExp(`^${cleanRef}$`, "i") },
+            ...(mongoose.isValidObjectId(cleanRef) ? [{ _id: cleanRef }, { ticketId: cleanRef }] : []),
+          ],
+        }).lean();
+
+        if (attendeeObj) {
+          attendeeId = String(attendeeObj._id);
+          attendeeEmail = attendeeObj.email || attendeeEmail;
+          attendeeName = attendeeObj.name || attendeeName;
+
+          if (!eventObj && attendeeObj.eventId) {
+            eventObj = await Event.findById(attendeeObj.eventId).lean();
+          }
+          if (attendeeObj.ticketId) {
+            ticketObj = await Ticket.findById(attendeeObj.ticketId).lean();
+          }
+        }
+      }
+
       // Find Ticket
-      if (attendeeObj && eventObj) {
+      if (attendeeObj && eventObj && !ticketObj) {
         ticketObj = await Ticket.findOne({
           attendeeId: attendeeObj._id,
           eventId: eventObj._id,
         }).lean();
-      } else if (inputTicketRef) {
+      } else if (inputTicketRef && !ticketObj) {
         ticketObj = await Ticket.findOne({
           orderId: new RegExp(`^${inputTicketRef.trim()}$`, "i"),
         }).lean();

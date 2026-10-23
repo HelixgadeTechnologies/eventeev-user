@@ -57,17 +57,42 @@ export async function POST(req: NextRequest) {
 
         // Path A: Look up by Ticket Reference / Order ID
         if (cleanRef) {
-          ticketObj = await Ticket.findOne({
-            orderId: new RegExp(`^${cleanRef}$`, "i"),
+          // Check Attendee collection first where backend stores orderId
+          attendeeObj = await Attendee.findOne({
+            $or: [
+              { orderId: new RegExp(`^${cleanRef}$`, "i") },
+              { reference: new RegExp(`^${cleanRef}$`, "i") },
+              { ticketRef: new RegExp(`^${cleanRef}$`, "i") },
+              ...(mongoose.isValidObjectId(cleanRef) ? [{ _id: cleanRef }] : []),
+            ],
           }).lean();
 
-          if (ticketObj) {
-            attendeeObj = await Attendee.findById(ticketObj.attendeeId).lean();
-            if (ticketObj.eventId && !eventObj) {
-              eventObj = await Event.findById(ticketObj.eventId).lean();
+          if (attendeeObj) {
+            if (attendeeObj.eventId && !eventObj) {
+              eventObj = await Event.findById(attendeeObj.eventId).lean();
               if (eventObj) {
                 resolvedEventId = String(eventObj._id);
                 resolvedConnectCode = eventObj.connectCode || eventObj.slug;
+              }
+            }
+            if (attendeeObj.ticketId) {
+              ticketObj = await Ticket.findById(attendeeObj.ticketId).lean();
+            }
+          }
+
+          if (!attendeeObj) {
+            ticketObj = await Ticket.findOne({
+              orderId: new RegExp(`^${cleanRef}$`, "i"),
+            }).lean();
+
+            if (ticketObj) {
+              attendeeObj = await Attendee.findById(ticketObj.attendeeId).lean();
+              if (ticketObj.eventId && !eventObj) {
+                eventObj = await Event.findById(ticketObj.eventId).lean();
+                if (eventObj) {
+                  resolvedEventId = String(eventObj._id);
+                  resolvedConnectCode = eventObj.connectCode || eventObj.slug;
+                }
               }
             }
           }
